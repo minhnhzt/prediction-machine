@@ -14,7 +14,10 @@ A high-performance predictive analytics and quantitative betting system for Leag
     *   *AutoML Stacking*: Integrated **Amazon AutoGluon-Tabular** for stacked ensembling, optimized to leverage multi-GPU architectures (like NVIDIA H100) and large RAM environments.
     *   *LLM Fine-tuning*: Fine-tune **Qwen-2.5-14B-Instruct** using QLoRA on historical draft sequences, ELOs, and rolling team statistics. We extract normalized Softmax probabilities from the target logits (`"Blue"` vs `"Red"`) to feed win probabilities directly into the Kelly Criterion betting pipeline.
 *   **Live Schedule & Caching**: Syncs upcoming schedules directly from the official **Lolesports API** with local caching to bypass rate limits.
+*   **Real-time Auto-Crawling (Leaguepedia API)**: Automatically identifies recently completed matches during schedule prediction or betting calculations and crawls their detailed stats (bans, picks, first bloods, barons, towers, dragons, player KDAs, etc.) from the **Leaguepedia Cargo API** to keep the SQLite database continuously up to date.
 *   **Real-time Odds Scraping**: Automatically extracts Match Winner, Map Handicap, Total Maps, and Correct Score odds from **Bovada's public JSON API** (with Egamersworld as a fallback scraper) and maps team spellings fuzzy-style.
+*   **Dynamic Progress Tracking**: Every training, benchmarking, dataset compilation, database ingestion, and schedule query task includes interactive, real-time progress bars using `tqdm`.
+*   **Flexible Hugging Face Compatibility**: Implements dynamic reflection (runtime signature checking) to adapt `TrainingArguments`, `SFTConfig`, and `SFTTrainer` parameter routing to support multiple versions of `transformers` and `trl` seamlessly.
 *   **Secondary Market Probability Solver**: Utilizes best-of-3 (Bo3) and best-of-5 (Bo5) binomial distributions to calculate exact model probabilities for Map Handicaps, Total Maps, and Correct Scores.
 *   **Interactive Betting Calculator**: Includes a command-line wizard (`--interactive`) allowing you to input odds seen on any bet site (e.g., Stake) to calculate optimal Kelly wager sizes.
 
