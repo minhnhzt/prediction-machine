@@ -1,0 +1,6 @@
+# LPL Match Prediction System — Dependencies
+pandas>=2.0
+scikit-learn>=1.3
+numpy>=1.24
+# Optional: uncomment for XGBoost support
+# xgboost>=2.0

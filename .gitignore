@@ -1,0 +1,30 @@
+# Databases
+*.db
+*.db-journal
+*.sqlite3
+
+# Cache and temporary logs
+lolesports_cache.json
+*.log
+bovada_sample.json
+
+# AutoGluon output directories
+AutogluonModels/
+autogluon_models/
+
+# Python Virtual Environments
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE configurations
+.idea/
+.vscode/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
