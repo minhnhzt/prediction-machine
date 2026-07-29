@@ -302,7 +302,7 @@ def run_interactive_calculator(league: str, model_type: str, db_path: str) -> No
 def main() -> None:
     parser = argparse.ArgumentParser(description="LPL/LCK Match Prediction System — End-to-End Pipeline")
     parser.add_argument("--league", type=str, default="LPL", choices=["LPL", "LCK"], help="League to focus on (LPL or LCK)")
-    parser.add_argument("--model", type=str, default="rf", choices=["lr", "rf", "xgboost", "lightgbm", "tabattention"], help="Model type to use")
+    parser.add_argument("--model", type=str, default="rf", choices=["lr", "rf", "xgboost", "lightgbm", "tabattention", "autogluon"], help="Model type to use")
     parser.add_argument("--tune", action="store_true", help="Enable hyperparameter tuning via GridSearchCV")
     parser.add_argument("--benchmark", action="store_true", help="Run the full benchmarking suite for the selected league")
     parser.add_argument("--schedule", action="store_true", help="Predict outcomes for matches in the upcoming 3 days")

@@ -31,6 +31,11 @@ from feature_engineering import build_feature_dataframe, get_latest_team_stats, 
 from model import PyTorchTabAttentionClassifier
 from kelly_criterion import kelly_criterion
 
+try:
+    from autogluon_model import AutoGluonClassifier
+except ImportError:
+    AutoGluonClassifier = None
+
 # --- Configuration ---
 CACHE_FILE = os.path.join(os.path.dirname(__file__), "lolesports_cache.json")
 API_URL = "https://esports-api.lolesports.com/persisted/gw/getSchedule"
@@ -422,7 +427,11 @@ def train_model_for_league(league, model_type="lr", db_path=DB_PATH):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    if league == "LPL":
+    if model_type == "autogluon":
+        if AutoGluonClassifier is None:
+            raise ImportError("AutoGluonClassifier is not available. Ensure 'autogluon' is installed.")
+        model = AutoGluonClassifier(time_limit=300, presets="best_quality")
+    elif league == "LPL":
         if model_type == "lr":
             model = LogisticRegression(C=0.01, solver="liblinear", random_state=42)
         elif model_type == "rf":

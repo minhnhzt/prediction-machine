@@ -46,6 +46,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+# AutoGluon support
+try:
+    from autogluon_model import AutoGluonClassifier
+except ImportError:
+    AutoGluonClassifier = None
+
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -255,6 +261,14 @@ def train_and_evaluate(
     elif model_type == "tabattention":
         base_model = PyTorchTabAttentionClassifier()
         model_name = "TabAttention (PyTorch Self-Attention)"
+    elif model_type == "autogluon":
+        if AutoGluonClassifier is None:
+            raise ImportError(
+                "AutoGluonClassifier is not available. Ensure AutoGluon is installed: pip install autogluon"
+            )
+        presets = 'best_quality' if tune else 'medium_quality_faster_train'
+        base_model = AutoGluonClassifier(time_limit=300, presets=presets)
+        model_name = "AutoGluonClassifier"
     else:
         raise ValueError(f"Invalid model_type: {model_type}")
 
