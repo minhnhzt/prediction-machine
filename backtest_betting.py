@@ -85,7 +85,22 @@ def run_backtest(league="LPL", model_type="lr", initial_bankroll=1000.0, fractio
     teams_dict = {}
     for tid, name in conn.execute("SELECT Id, Name FROM Team").fetchall():
         teams_dict[tid] = name
+
+    # Pre-load all real odds from MatchOdds table for fast lookup
+    real_odds_map = {}  # key: (blue_name_lower, red_name_lower, date) -> (odds_blue, odds_red)
+    try:
+        for row in conn.execute("SELECT BlueTeamName, RedTeamName, MatchDate, OddsBlue, OddsRed FROM MatchOdds").fetchall():
+            key = (row[0].strip().upper(), row[1].strip().upper(), row[2])
+            real_odds_map[key] = (row[3], row[4])
+            # Also store reversed key for matching flexibility
+            key_rev = (row[1].strip().upper(), row[0].strip().upper(), row[2])
+            real_odds_map[key_rev] = (row[4], row[3])
+    except Exception:
+        pass  # Table might not exist yet
     conn.close()
+
+    real_odds_used = 0
+    sim_odds_used = 0
 
     bankroll = initial_bankroll
     bankroll_history = [bankroll]
@@ -95,8 +110,8 @@ def run_backtest(league="LPL", model_type="lr", initial_bankroll=1000.0, fractio
     max_bankroll = bankroll
     max_drawdown = 0.0
 
-    print(f"\n{'Date':<11} | {'Matchup':<30} | {'Model Prob':<12} | {'Bookie Odds':<13} | {'Wager':<14} | {'Result':<6} | {'New Bankroll'}")
-    print("-" * 115)
+    print(f"\n{'Date':<11} | {'Matchup':<30} | {'Model Prob':<12} | {'Bookie Odds':<17} | {'Wager':<14} | {'Result':<6} | {'New Bankroll'}")
+    print("-" * 120)
 
     # Chronological Walk-Forward Simulation
     for i in range(len(test_df)):
@@ -129,17 +144,24 @@ def run_backtest(league="LPL", model_type="lr", initial_bankroll=1000.0, fractio
         red_name = teams_dict.get(red_id, f"Team_{red_id}")
         matchup_str = f"{blue_name} vs {red_name}"
 
-        # 6. Simulate Bookmaker Odds using ELO difference
-        blue_elo = current_row["Blue_Elo"]
-        red_elo = current_row["Red_Elo"]
-        
-        # Calculate bookmaker fair probability
-        bookie_prob_blue = 1.0 / (1.0 + 10 ** ((red_elo - blue_elo) / 400.0))
-        bookie_prob_red = 1.0 - bookie_prob_blue
+        # 6. Try to use REAL bookmaker odds from MatchOdds table first
+        date_str = str(current_row["Date"])
+        odds_source = "SIM"
+        lookup_key = (blue_name.strip().upper(), red_name.strip().upper(), date_str)
 
-        # Apply margin (overround) to bookmaker price
-        odds_blue = max(1.01, 1.0 / (bookie_prob_blue * (1.0 + margin)))
-        odds_red = max(1.01, 1.0 / (bookie_prob_red * (1.0 + margin)))
+        if lookup_key in real_odds_map:
+            odds_blue, odds_red = real_odds_map[lookup_key]
+            odds_source = "REAL"
+            real_odds_used += 1
+        else:
+            # Fallback: Simulate bookmaker odds using ELO difference
+            blue_elo = current_row["Blue_Elo"]
+            red_elo = current_row["Red_Elo"]
+            bookie_prob_blue = 1.0 / (1.0 + 10 ** ((red_elo - blue_elo) / 400.0))
+            bookie_prob_red = 1.0 - bookie_prob_blue
+            odds_blue = max(1.01, 1.0 / (bookie_prob_blue * (1.0 + margin)))
+            odds_red = max(1.01, 1.0 / (bookie_prob_red * (1.0 + margin)))
+            sim_odds_used += 1
 
         # 7. Evaluate betting opportunities
         edge_blue = p_blue * odds_blue - 1.0
@@ -186,12 +208,11 @@ def run_backtest(league="LPL", model_type="lr", initial_bankroll=1000.0, fractio
         dd = (max_bankroll - bankroll) / max_bankroll if max_bankroll > 0 else 0.0
         max_drawdown = max(max_drawdown, dd)
 
-        # Log details
-        date_str = str(current_row["Date"])
+        # Log details with odds source indicator
         prob_str = f"B:{p_blue:.1%} R:{p_red:.1%}"
-        odds_str = f"B:{odds_blue:.2f} R:{odds_red:.2f}"
+        odds_str = f"[{odds_source}] B:{odds_blue:.2f} R:{odds_red:.2f}"
         wager_str = f"${wager:.2f} ({bet_side})" if wager > 0 else "No Edge"
-        print(f"{date_str:<11} | {matchup_str:<30} | {prob_str:<12} | {odds_str:<13} | {wager_str:<14} | {result_str:<6} | ${bankroll:,.2f}")
+        print(f"{date_str:<11} | {matchup_str:<30} | {prob_str:<12} | {odds_str:<17} | {wager_str:<14} | {result_str:<6} | ${bankroll:,.2f}")
 
     # Final summary
     total_roi = (bankroll - initial_bankroll) / initial_bankroll
@@ -207,6 +228,7 @@ def run_backtest(league="LPL", model_type="lr", initial_bankroll=1000.0, fractio
     print(f"  * Bets Won         : {bets_won} ({win_rate:.1%})")
     print(f"  * Total Wagered    : ${total_wagered:,.2f}")
     print(f"  * Maximum Drawdown : {max_drawdown:.1%}")
+    print(f"  * Odds Source      : {real_odds_used} REAL / {sim_odds_used} SIMULATED")
     print("=" * 70)
 
     # Print ASCII chart

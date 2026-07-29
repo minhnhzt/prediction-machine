@@ -125,3 +125,31 @@ CREATE TABLE IF NOT EXISTS DbCache (
     Value       TEXT NOT NULL,
     Timestamp   INTEGER NOT NULL
 );
+
+-- ---------------------------------------------------------------------------
+-- 9. MatchOdds (Real bookmaker odds: auto-collected or scraped)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS MatchOdds (
+    Id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    BlueTeamName    TEXT NOT NULL,
+    RedTeamName     TEXT NOT NULL,
+    MatchDate       TEXT NOT NULL,           -- ISO YYYY-MM-DD
+    Source          TEXT NOT NULL DEFAULT 'bovada', -- 'bovada', 'oddsportal'
+    OddsBlue        REAL NOT NULL,           -- Decimal moneyline odds
+    OddsRed         REAL NOT NULL,
+    HcBluePrice     REAL,                    -- Map Handicap Blue price
+    HcBlueVal       REAL,                    -- e.g. +1.5
+    HcRedPrice      REAL,
+    HcRedVal        REAL,                    -- e.g. -1.5
+    TotalOverPrice  REAL,                    -- Over 2.5 price
+    TotalUnderPrice REAL,                    -- Under 2.5 price
+    Cs20            REAL,                    -- Score 2-0 odds
+    Cs21            REAL,                    -- Score 2-1 odds
+    Cs12            REAL,                    -- Score 1-2 odds
+    Cs02            REAL,                    -- Score 0-2 odds
+    CrawledAt       TEXT NOT NULL,           -- ISO timestamp of crawl
+    UNIQUE(BlueTeamName, RedTeamName, MatchDate, Source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_matchodds_date ON MatchOdds(MatchDate);
+

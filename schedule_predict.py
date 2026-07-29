@@ -510,6 +510,67 @@ def get_team_features(team_name, latest_stats, name_to_id):
         }
         return default_stats, True
 
+# --- Auto-save Bovada odds to database ---
+def save_odds_to_db(blue_name, red_name, match_date, bovada_odds, direction, bovada_names, db_path=DB_PATH):
+    """Save real Bovada odds into MatchOdds table for historical analysis."""
+    if not bovada_odds or not bovada_names:
+        return
+    try:
+        blue_key = bovada_names[0] if direction == "direct" else bovada_names[1]
+        red_key = bovada_names[1] if direction == "direct" else bovada_names[0]
+
+        ml_blue = bovada_odds["ml"].get(blue_key)
+        ml_red = bovada_odds["ml"].get(red_key)
+        if not ml_blue or not ml_red:
+            return
+
+        # Extract handicap odds
+        hc = bovada_odds.get("hc", {})
+        hc_blue_price, hc_blue_val = None, None
+        hc_red_price, hc_red_val = None, None
+        for k, v in hc.items():
+            if blue_key.lower() in k.lower():
+                hc_blue_price = v.get("price")
+                hc_blue_val = v.get("handicap")
+            elif red_key.lower() in k.lower():
+                hc_red_price = v.get("price")
+                hc_red_val = v.get("handicap")
+
+        # Extract total maps odds
+        total = bovada_odds.get("total", {})
+        total_over = total.get("Over", {}).get("price") if isinstance(total.get("Over"), dict) else total.get("Over")
+        total_under = total.get("Under", {}).get("price") if isinstance(total.get("Under"), dict) else total.get("Under")
+
+        # Extract correct score odds
+        cs = bovada_odds.get("correct_score", {})
+        cs_20 = cs.get(f"{blue_key} 2-0") or cs.get(f"{blue_name} 2-0")
+        cs_21 = cs.get(f"{blue_key} 2-1") or cs.get(f"{blue_name} 2-1")
+        cs_12 = cs.get(f"{red_key} 2-1") or cs.get(f"{red_name} 2-1")
+        cs_02 = cs.get(f"{red_key} 2-0") or cs.get(f"{red_name} 2-0")
+
+        crawled_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            """INSERT OR REPLACE INTO MatchOdds
+               (BlueTeamName, RedTeamName, MatchDate, Source,
+                OddsBlue, OddsRed,
+                HcBluePrice, HcBlueVal, HcRedPrice, HcRedVal,
+                TotalOverPrice, TotalUnderPrice,
+                Cs20, Cs21, Cs12, Cs02, CrawledAt)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (blue_name, red_name, match_date, "bovada",
+             ml_blue, ml_red,
+             hc_blue_price, hc_blue_val, hc_red_price, hc_red_val,
+             total_over, total_under,
+             cs_20, cs_21, cs_12, cs_02, crawled_at)
+        )
+        conn.commit()
+        conn.close()
+        print(f"   [DB] Saved Bovada odds: {blue_name} {ml_blue:.2f} vs {red_name} {ml_red:.2f}")
+    except Exception as e:
+        print(f"   [DB] Warning: could not save odds: {e}")
+
 # --- Main schedule prediction ---
 def predict_schedule(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=True, show_markets=False):
     """Fetch the schedule, align team names, scrape Bovada, and predict outcomes for all markets."""
@@ -665,6 +726,17 @@ def predict_schedule(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=T
         bovada_odds = None
         if matched_bev:
             bovada_odds = parse_bovada_markets_for_event(matched_bev, b_team_a, b_team_b)
+
+        # Auto-save real Bovada odds to database for historical analysis
+        if bovada_odds and state == "unstarted":
+            match_date = start_time_str[:10]  # Extract YYYY-MM-DD
+            save_odds_to_db(
+                blue_db_name or blue_api_name,
+                red_db_name or red_api_name,
+                match_date, bovada_odds, direction,
+                (b_team_a, b_team_b) if matched_bev else None,
+                db_path=db_path
+            )
 
         predictions.append({
             "time": start_time_str,
