@@ -13,7 +13,7 @@ try:
         TrainingArguments
     )
     from peft import LoraConfig, get_peft_model, TaskType
-    from trl import SFTTrainer
+    from trl import SFTTrainer, SFTConfig
     HAS_LLM_TRAIN = True
 except (ImportError, OSError):
     load_dataset = None
@@ -25,6 +25,7 @@ except (ImportError, OSError):
     get_peft_model = None
     TaskType = None
     SFTTrainer = None
+    SFTConfig = None
     HAS_LLM_TRAIN = False
 
 def train_llm(model_id="Qwen/Qwen2.5-14B-Instruct", train_path="llm_train.jsonl", val_path="llm_val.jsonl", output_dir="qwen_lora_adapter"):
@@ -82,33 +83,60 @@ def train_llm(model_id="Qwen/Qwen2.5-14B-Instruct", train_path="llm_train.jsonl"
     formatted_dataset = dataset.map(format_chat_template, batched=True, remove_columns=["messages"])
 
     # Setup SFT Trainer
-    print(f"[INFO] Preparing Training Arguments...")
-    training_args = TrainingArguments(
-        output_dir="qwen_lora_temp_output",
-        per_device_train_batch_size=4,
-        gradient_accumulation_steps=4,
-        learning_rate=2e-4,
-        logging_steps=10,
-        num_train_epochs=3,
-        bf16=True,  # H100 supports bfloat16 natively
-        save_strategy="no",
-        eval_strategy="epoch",
-        report_to="none",
-        optim="paged_adamw_8bit",  # Save VRAM during training
-        disable_tqdm=False  # Explicitly force progress bar
-    )
-
-    print(f"[INFO] Starting SFTTrainer execution...")
-    trainer = SFTTrainer(
-        model=model,
-        train_dataset=formatted_dataset["train"],
-        eval_dataset=formatted_dataset["validation"],
-        peft_config=peft_config,
-        dataset_text_field="text",
-        max_seq_length=512,
-        tokenizer=tokenizer,
-        args=training_args
-    )
+    if SFTConfig is not None:
+        print(f"[INFO] Preparing SFTConfig...")
+        training_args = SFTConfig(
+            output_dir="qwen_lora_temp_output",
+            per_device_train_batch_size=4,
+            gradient_accumulation_steps=4,
+            learning_rate=2e-4,
+            logging_steps=10,
+            num_train_epochs=3,
+            bf16=True,  # H100 supports bfloat16 natively
+            save_strategy="no",
+            eval_strategy="epoch",
+            report_to="none",
+            optim="paged_adamw_8bit",  # Save VRAM during training
+            disable_tqdm=False,  # Explicitly force progress bar
+            dataset_text_field="text",
+            max_seq_length=512
+        )
+        print(f"[INFO] Starting SFTTrainer execution...")
+        trainer = SFTTrainer(
+            model=model,
+            train_dataset=formatted_dataset["train"],
+            eval_dataset=formatted_dataset["validation"],
+            peft_config=peft_config,
+            tokenizer=tokenizer,
+            args=training_args
+        )
+    else:
+        print(f"[INFO] Preparing Training Arguments (legacy fallback)...")
+        training_args = TrainingArguments(
+            output_dir="qwen_lora_temp_output",
+            per_device_train_batch_size=4,
+            gradient_accumulation_steps=4,
+            learning_rate=2e-4,
+            logging_steps=10,
+            num_train_epochs=3,
+            bf16=True,
+            save_strategy="no",
+            evaluation_strategy="epoch",
+            report_to="none",
+            optim="paged_adamw_8bit",
+            disable_tqdm=False
+        )
+        print(f"[INFO] Starting SFTTrainer execution...")
+        trainer = SFTTrainer(
+            model=model,
+            train_dataset=formatted_dataset["train"],
+            eval_dataset=formatted_dataset["validation"],
+            peft_config=peft_config,
+            dataset_text_field="text",
+            max_seq_length=512,
+            tokenizer=tokenizer,
+            args=training_args
+        )
 
     trainer.train()
 
