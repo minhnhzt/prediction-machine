@@ -47,7 +47,7 @@ flowchart TD
 ### Linux / Ubuntu Setup
 First, update the package list and install Git along with Python utilities:
 ```bash
-sudo apt update && sudo apt install git python3-pip python3-venv -y
+sudo apt update && sudo apt install git python3-pip python3-venv python3.10-venv -y
 ```
 
 ### 1. Clone the repository
@@ -59,7 +59,7 @@ cd prediction-machine
 ### 2. Create a virtual environment & install dependencies
 ```bash
 python3 -m venv venv
-source venv/bin/activate
+. venv/bin/activate
 
 pip install --upgrade pip
 pip install -r requirements.txt
