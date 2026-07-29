@@ -245,6 +245,27 @@ def run_interactive_calculator(league: str, model_type: str, db_path: str) -> No
         live_21 = bovada_odds["correct_score"].get(f"{blue_key} 2-1")
         live_12 = bovada_odds["correct_score"].get(f"{red_key} 2-1")
         live_02 = bovada_odds["correct_score"].get(f"{red_key} 2-0")
+        
+        if not live_20 or not live_21 or not live_12 or not live_02:
+            ml_blue = bovada_odds["ml"].get(blue_key)
+            ml_red = bovada_odds["ml"].get(red_key)
+            if ml_blue and ml_red:
+                try:
+                    from schedule_predict import solve_map_prob
+                    ip_blue = 1.0 / ml_blue
+                    ip_red = 1.0 / ml_red
+                    margin = ip_blue + ip_red - 1.0
+                    norm_blue = ip_blue / (ip_blue + ip_red)
+                    p_map = solve_map_prob(norm_blue, best_of=3)
+                    q_map = 1.0 - p_map
+                    
+                    factor = 1.0 + max(0.0, margin)
+                    if not live_20: live_20 = 1.0 / (p_map**2 * factor)
+                    if not live_21: live_21 = 1.0 / (2 * p_map**2 * q_map * factor)
+                    if not live_12: live_12 = 1.0 / (2 * q_map**2 * p_map * factor)
+                    if not live_02: live_02 = 1.0 / (q_map**2 * factor)
+                except Exception:
+                    pass
     else:
         live_20 = live_21 = live_12 = live_02 = None
     

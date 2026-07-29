@@ -802,6 +802,45 @@ def predict_schedule(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=T
                 cs_12 = p["bovada_odds"]["correct_score"].get(f"{red_key} 2-1")  # Red wins 2-1 is score 1-2 from Blue perspective
                 cs_02 = p["bovada_odds"]["correct_score"].get(f"{red_key} 2-0")  # Red wins 2-0 is score 0-2 from Blue perspective
                 
+                # If Correct Score odds are missing from Bovada, synthesize them from Moneyline!
+                if not cs_20 or not cs_21 or not cs_12 or not cs_02:
+                    ml_blue = p["bovada_odds"]["ml"].get(blue_key)
+                    ml_red = p["bovada_odds"]["ml"].get(red_key)
+                    if ml_blue and ml_red:
+                        try:
+                            # 1. Implied probabilities
+                            ip_blue = 1.0 / ml_blue
+                            ip_red = 1.0 / ml_red
+                            margin = ip_blue + ip_red - 1.0
+                            
+                            # 2. Normalize probability
+                            norm_blue = ip_blue / (ip_blue + ip_red)
+                            
+                            # 3. Solve for map win probability
+                            p_map = solve_map_prob(norm_blue, best_of=best_of)
+                            q_map = 1.0 - p_map
+                            
+                            # 4. Calculate implied score probs (assume Bo3)
+                            raw_probs = {
+                                "2-0": p_map ** 2,
+                                "2-1": 2 * (p_map ** 2) * q_map,
+                                "1-2": 2 * (q_map ** 2) * p_map,
+                                "0-2": q_map ** 2
+                            }
+                            
+                            # 5. Convert to decimal odds applying margin
+                            factor = 1.0 + max(0.0, margin)
+                            if not cs_20:
+                                cs_20 = 1.0 / (raw_probs["2-0"] * factor)
+                            if not cs_21:
+                                cs_21 = 1.0 / (raw_probs["2-1"] * factor)
+                            if not cs_12:
+                                cs_12 = 1.0 / (raw_probs["1-2"] * factor)
+                            if not cs_02:
+                                cs_02 = 1.0 / (raw_probs["0-2"] * factor)
+                        except Exception:
+                            pass
+                
             show_kelly_for_market("Score 2-0", p["market_probs"]["2-0"], cs_20)
             show_kelly_for_market("Score 2-1", p["market_probs"]["2-1"], cs_21)
             show_kelly_for_market("Score 1-2", p["market_probs"]["1-2"], cs_12)
