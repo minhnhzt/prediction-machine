@@ -92,7 +92,7 @@ def train_llm(model_id="Qwen/Qwen2.5-14B-Instruct", train_path="llm_train.jsonl"
         num_train_epochs=3,
         bf16=True,  # H100 supports bfloat16 natively
         save_strategy="no",
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         report_to="none",
         optim="paged_adamw_8bit",  # Save VRAM during training
         disable_tqdm=False  # Explicitly force progress bar
