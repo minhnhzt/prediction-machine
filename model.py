@@ -188,6 +188,12 @@ def get_hyperparameter_grid(model_key: str) -> dict:
             "lr": [0.005, 0.01],
             "epochs": [40, 60]
         }
+    elif model_key == "gb":
+        return {
+            "n_estimators": [100, 200],
+            "max_depth": [3, 5],
+            "learning_rate": [0.05, 0.1]
+        }
     return {}
 
 
@@ -235,6 +241,7 @@ def train_and_evaluate(
     # ── Model selection ───────────────────────────────────────────────────
     model_name = "Unknown"
     base_model = None
+    actual_model_key = model_type
 
     if model_type == "lr":
         base_model = LogisticRegression(random_state=RANDOM_STATE, max_iter=1000)
@@ -247,6 +254,7 @@ def train_and_evaluate(
             print("⚠️  xgboost not installed, falling back to GradientBoosting")
             base_model = GradientBoostingClassifier(random_state=RANDOM_STATE)
             model_name = "GradientBoostingClassifier (fallback)"
+            actual_model_key = "gb"
         else:
             base_model = XGBClassifier(random_state=RANDOM_STATE, eval_metric="logloss", n_jobs=-1)
             model_name = "XGBClassifier"
@@ -255,6 +263,7 @@ def train_and_evaluate(
             print("⚠️  lightgbm not installed, falling back to GradientBoosting")
             base_model = GradientBoostingClassifier(random_state=RANDOM_STATE)
             model_name = "GradientBoostingClassifier (fallback)"
+            actual_model_key = "gb"
         else:
             base_model = LGBMClassifier(random_state=RANDOM_STATE, verbose=-1, n_jobs=-1)
             model_name = "LGBMClassifier"
@@ -274,7 +283,7 @@ def train_and_evaluate(
 
     # ── Model fitting (Tuned or Default) ──────────────────────────────────
     if tune:
-        param_grid = get_hyperparameter_grid(model_type)
+        param_grid = get_hyperparameter_grid(actual_model_key)
         if param_grid:
             print(f"⚙️  Tuning {model_name} with GridSearchCV (TimeSeriesSplit)...")
             cv = TimeSeriesSplit(n_splits=5)
