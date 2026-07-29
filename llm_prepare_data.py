@@ -31,7 +31,13 @@ def prepare_llm_data(league="LPL", db_path=DB_PATH, train_ratio=0.80):
 
     jsonl_data = []
 
-    for _, row in df.iterrows():
+    try:
+        from tqdm import tqdm
+        row_iter = tqdm(df.iterrows(), total=len(df), desc="Compiling LLM dataset")
+    except ImportError:
+        row_iter = df.iterrows()
+
+    for _, row in row_iter:
         mid = int(row["MatchId"])
         blue_id = int(row["BlueTeamId"])
         red_id = int(row["RedTeamId"])

@@ -57,7 +57,13 @@ def run_benchmark(league: str = "LPL") -> None:
     test_df = df.iloc[split_idx:]
     y_test = test_df[TARGET_COL].values
 
-    for model_key, tune in model_configs:
+    try:
+        from tqdm import tqdm
+        config_iter = tqdm(model_configs, desc="Benchmarking Models")
+    except ImportError:
+        config_iter = model_configs
+
+    for model_key, tune in config_iter:
         tune_str = "Tuned" if tune else "Default"
         print(f"\n🚀 Running: Model={model_key.upper()} ({tune_str})...")
         

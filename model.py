@@ -129,7 +129,13 @@ class PyTorchTabAttentionClassifier(BaseEstimator, ClassifierMixin):
         dataset = torch.utils.data.TensorDataset(X_t, y_t)
         loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
         
-        for epoch in range(self.epochs):
+        try:
+            from tqdm import tqdm
+            epoch_iter = tqdm(range(self.epochs), desc="Training TabAttention")
+        except ImportError:
+            epoch_iter = range(self.epochs)
+            
+        for epoch in epoch_iter:
             for batch_X, batch_y in loader:
                 optimizer.zero_grad()
                 pred = self.model(batch_X)

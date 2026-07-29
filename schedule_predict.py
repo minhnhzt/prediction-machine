@@ -514,7 +514,13 @@ def predict_schedule(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=T
 
     predictions = []
 
-    for ev in events:
+    try:
+        from tqdm import tqdm
+        event_iter = tqdm(events, desc="Predicting Schedule Outcomes")
+    except ImportError:
+        event_iter = events
+
+    for ev in event_iter:
         state = ev.get("state")
         start_time_str = ev.get("startTime", "")
         if not start_time_str:
