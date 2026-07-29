@@ -37,7 +37,6 @@ except ImportError:
     AutoGluonClassifier = None
 
 # --- Configuration ---
-CACHE_FILE = os.path.join(os.path.dirname(__file__), "lolesports_cache.json")
 API_URL = "https://esports-api.lolesports.com/persisted/gw/getSchedule"
 API_HEADERS = {
     "x-api-key": "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z",
@@ -176,33 +175,72 @@ def slugify(name):
     n = re.sub(r'[\s]+', '-', n)
     return n
 
-def fetch_schedule(use_cache=True):
-    """Fetch the schedule from Lolesports API with a 1-hour cache."""
-    if use_cache and os.path.exists(CACHE_FILE):
-        mtime = os.path.getmtime(CACHE_FILE)
-        now = time.time()
-        if now - mtime < 3600:
-            print("[INFO] Loading schedule from local cache...")
-            try:
-                with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"[WARNING] Error reading cache: {e}. Fetching new data...")
+def fetch_schedule(use_cache=True, db_path=DB_PATH):
+    """Fetch the schedule from Lolesports API with a 1-hour database-backed cache."""
+    if use_cache:
+        try:
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS DbCache (
+                    Key         TEXT PRIMARY KEY,
+                    Value       TEXT NOT NULL,
+                    Timestamp   INTEGER NOT NULL
+                )
+            """)
+            row = cur.execute("SELECT Value, Timestamp FROM DbCache WHERE Key = ?", ("lolesports_schedule",)).fetchone()
+            if row:
+                val, ts = row
+                now = time.time()
+                if now - ts < 3600:
+                    print("[INFO] Loading schedule from database cache...")
+                    conn.close()
+                    return json.loads(val)
+            conn.close()
+        except Exception as e:
+            print(f"[WARNING] Error reading database cache: {e}. Fetching new data...")
 
     print("[INFO] Fetching live schedule from Lolesports API...")
     try:
         r = requests.get(API_URL, headers=API_HEADERS, params={"hl": "en-US"}, timeout=15)
         r.raise_for_status()
         data = r.json()
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        
+        # Save to database cache
+        try:
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS DbCache (
+                    Key         TEXT PRIMARY KEY,
+                    Value       TEXT NOT NULL,
+                    Timestamp   INTEGER NOT NULL
+                )
+            """)
+            cur.execute(
+                "INSERT OR REPLACE INTO DbCache (Key, Value, Timestamp) VALUES (?, ?, ?)",
+                ("lolesports_schedule", json.dumps(data), int(time.time()))
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"[WARNING] Failed to write schedule to database cache: {e}")
+            
         return data
     except Exception as e:
         print(f"[ERROR] Failed to fetch from API: {e}")
-        if os.path.exists(CACHE_FILE):
-            print("[WARNING] Falling back to expired local cache.")
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+        try:
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            row = cur.execute("SELECT Value FROM DbCache WHERE Key = ?", ("lolesports_schedule",)).fetchone()
+            if row:
+                print("[WARNING] Falling back to expired database cache.")
+                val = row[0]
+                conn.close()
+                return json.loads(val)
+            conn.close()
+        except Exception:
+            pass
         raise e
 
 # --- Bovada Odds Scraper ---
@@ -481,7 +519,7 @@ def predict_schedule(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=T
 
     # 1. Fetch schedule
     try:
-        schedule_data = fetch_schedule(use_cache=use_cache)
+        schedule_data = fetch_schedule(use_cache=use_cache, db_path=db_path)
     except Exception:
         print("[ERROR] Cannot retrieve schedule. Exiting.")
         return

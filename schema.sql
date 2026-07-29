@@ -116,3 +116,12 @@ CREATE INDEX IF NOT EXISTS idx_match_date        ON Match(Date);
 CREATE INDEX IF NOT EXISTS idx_matchdetail_team  ON MatchDetail(TeamId, MatchId);
 CREATE INDEX IF NOT EXISTS idx_playerstat_match  ON PlayerStat(MatchId);
 CREATE INDEX IF NOT EXISTS idx_pickban_match     ON PickBan(MatchId);
+
+-- ---------------------------------------------------------------------------
+-- 8. DbCache (Generic Key-Value persistent database cache)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS DbCache (
+    Key         TEXT PRIMARY KEY,
+    Value       TEXT NOT NULL,
+    Timestamp   INTEGER NOT NULL
+);
