@@ -543,6 +543,15 @@ def predict_schedule(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=T
         blue_api_name = teams[0].get("name", "Unknown")
         red_api_name = teams[1].get("name", "Unknown")
 
+        if state == "completed":
+            try:
+                from real_data_pipeline import crawl_completed_match
+                match_date_str = start_time.strftime("%Y-%m-%d")
+                crawl_completed_match(blue_api_name, red_api_name, match_date_str, db_path=db_path)
+            except Exception as e:
+                print(f"[AUTO-CRAWL] Warning: Failed to crawl completed match {blue_api_name} vs {red_api_name}: {e}")
+            continue
+
         blue_db_name = normalize_name(blue_api_name)
         red_db_name = normalize_name(red_api_name)
 

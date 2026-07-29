@@ -579,6 +579,193 @@ def import_leaguepedia(
 #  CLI Entry Point
 # =============================================================================
 
+def crawl_completed_match(blue_team_name: str, red_team_name: str, date_str: str, db_path: str = DB_PATH) -> int:
+    """
+    Query Leaguepedia Cargo API for a completed match on a specific date,
+    and insert its game details and player stats into the database.
+    """
+    # Normalize inputs
+    blue = blue_team_name.strip()
+    red = red_team_name.strip()
+    date_val = date_str[:10]  # YYYY-MM-DD
+    
+    conn = init_database(db_path)
+    cur = conn.cursor()
+    
+    # Check if match already exists in database
+    blue_id_row = cur.execute("SELECT Id FROM Team WHERE Name = ?", (blue,)).fetchone()
+    red_id_row = cur.execute("SELECT Id FROM Team WHERE Name = ?", (red,)).fetchone()
+    
+    if blue_id_row and red_id_row:
+        b_id = blue_id_row[0]
+        r_id = red_id_row[0]
+        exists = cur.execute(
+            """SELECT 1 FROM Match 
+               WHERE ((BlueTeamId = ? AND RedTeamId = ?) OR (BlueTeamId = ? AND RedTeamId = ?)) 
+                 AND Date = ?""",
+            (b_id, r_id, r_id, b_id, date_val)
+        ).fetchone()
+        if exists:
+            conn.close()
+            return 0  # Already imported
+            
+    print(f"[AUTO-CRAWL] Fetching completed game data from Leaguepedia: {blue} vs {red} on {date_val}...")
+    
+    # Query game-level data
+    game_fields = (
+        "GameId, DateTime_UTC, Patch, Team1, Team2, Winner, "
+        "Team1Bans, Team2Bans, Team1Picks, Team2Picks, "
+        "Team1Gold, Team2Gold, Gamelength, "
+        "Team1Kills, Team2Kills, Team1Deaths, Team2Deaths, "
+        "Team1Dragons, Team2Dragons"
+    )
+    where = (
+        f"((Team1 = '{blue}' AND Team2 = '{red}') OR "
+        f"(Team1 = '{red}' AND Team2 = '{blue}')) AND "
+        f"DateTime_UTC LIKE '{date_val}%'"
+    )
+    
+    try:
+        game_rows = _cargo_query("ScoreboardGames", game_fields, where)
+    except Exception as e:
+        print(f"[AUTO-CRAWL] API Error fetching games: {e}")
+        conn.close()
+        return 0
+        
+    if not game_rows:
+        print(f"[AUTO-CRAWL] No games found on Leaguepedia for {blue} vs {red} on {date_val}.")
+        conn.close()
+        return 0
+        
+    print(f"[AUTO-CRAWL] Found {len(game_rows)} games. Fetching player stats...")
+    
+    # Query player-level stats
+    game_ids = [gr["GameId"] for gr in game_rows]
+    game_ids_str = ", ".join([f"'{gid}'" for gid in game_ids])
+    
+    player_fields = (
+        "GameId, Name, Team, Champion, Role, "
+        "Kills, Deaths, Assists, CS, DamageToChampions, VisionScore"
+    )
+    player_where = f"GameId IN ({game_ids_str})"
+    
+    try:
+        player_rows = _cargo_query("ScoreboardPlayers", player_fields, player_where)
+    except Exception as e:
+        print(f"[AUTO-CRAWL] API Error fetching player stats: {e}")
+        conn.close()
+        return 0
+        
+    # Index player rows by GameId
+    players_by_game = defaultdict(list)
+    for pr in player_rows:
+        gid = pr.get("GameId", "")
+        if gid:
+            players_by_game[gid].append(pr)
+            
+    inserted = 0
+    # Insert games into database
+    for gr in sorted(game_rows, key=lambda x: x.get("DateTime UTC", "")):
+        game_id = gr.get("GameId", "")
+        patch = (gr.get("Patch") or "").strip()
+        winner_name = (gr.get("Winner") or "").strip()
+        
+        gl_raw = (gr.get("Gamelength") or "30:00").strip()
+        if ":" in gl_raw:
+            parts = gl_raw.split(":")
+            duration = int(parts[0]) * 60 + int(parts[1])
+        else:
+            duration = _safe_int(gl_raw, 1800)
+            
+        b_id = _get_or_create(cur, "Team", gr.get("Team1", blue), {"Region": "LPL"})
+        r_id = _get_or_create(cur, "Team", gr.get("Team2", red), {"Region": "LPL"})
+        w_id = b_id if winner_name == gr.get("Team1") else r_id
+        
+        cur.execute(
+            """INSERT INTO Match
+               (Tournament, Date, Patch, BlueTeamId, RedTeamId, WinnerId, GameDuration)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            ("LPL 2025 Split 1", date_val, patch, b_id, r_id, w_id, duration)
+        )
+        match_id = cur.lastrowid
+        
+        # MatchDetail
+        for side, tid, tr in [("Blue", b_id, gr), ("Red", r_id, gr)]:
+            prefix = "Team1" if side == "Blue" else "Team2"
+            kills = _safe_int(tr.get(f"{prefix}Kills"), 0)
+            deaths = _safe_int(tr.get(f"{prefix}Deaths"), 0)
+            
+            cur.execute(
+                """INSERT INTO MatchDetail
+                   (MatchId, TeamId, Side, TotalKills, TotalDeaths,
+                    GoldDiff15, FirstBlood, FirstDragon)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (match_id, tid, side, kills, deaths, 0, 0, 0)
+            )
+            
+        # PickBan
+        order_counter = 1
+        for side, tid, prefix in [("Blue", b_id, "Team1"), ("Red", r_id, "Team2")]:
+            bans_str = (gr.get(f"{prefix}Bans") or "").strip()
+            if bans_str:
+                for ban_name in bans_str.split(","):
+                    ban_name = ban_name.strip()
+                    if ban_name:
+                        cid = _get_or_create(cur, "Champion", ban_name, {"PrimaryRole": ""})
+                        cur.execute(
+                            """INSERT INTO PickBan
+                               (MatchId, TeamId, ChampionId, IsBan, Phase, "Order")
+                               VALUES (?, ?, ?, 1, 1, ?)""",
+                            (match_id, tid, cid, order_counter)
+                        )
+                        order_counter += 1
+                        
+            picks_str = (gr.get(f"{prefix}Picks") or "").strip()
+            if picks_str:
+                for pick_name in picks_str.split(","):
+                    pick_name = pick_name.strip()
+                    if pick_name:
+                        cid = _get_or_create(cur, "Champion", pick_name, {"PrimaryRole": ""})
+                        cur.execute(
+                            """INSERT INTO PickBan
+                               (MatchId, TeamId, ChampionId, IsBan, Phase, "Order")
+                               VALUES (?, ?, ?, 0, 1, ?)""",
+                            (match_id, tid, cid, order_counter)
+                        )
+                        order_counter += 1
+                        
+        # PlayerStat
+        for pr in players_by_game.get(game_id, []):
+            p_name = (pr.get("Name") or "Unknown").strip()
+            p_team = (pr.get("Team") or "Unknown").strip()
+            p_champ = (pr.get("Champion") or "Unknown").strip()
+            p_role = _normalize_role(pr.get("Role") or "")
+            
+            p_team_id = _get_or_create(cur, "Team", p_team, {"Region": "LPL"})
+            p_player_id = _get_or_create(
+                cur, "Player", p_name,
+                {"TeamId": p_team_id, "Role": p_role}
+            )
+            p_champ_id = _get_or_create(cur, "Champion", p_champ, {"PrimaryRole": ""})
+            
+            cur.execute(
+                """INSERT INTO PlayerStat
+                   (MatchId, PlayerId, ChampionId, Role,
+                    Kills, Deaths, Assists, CS, DamageDealt, VisionScore)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (match_id, p_player_id, p_champ_id, p_role,
+                 _safe_int(pr.get("Kills")), _safe_int(pr.get("Deaths")), _safe_int(pr.get("Assists")),
+                 _safe_int(pr.get("CS")), _safe_int(pr.get("DamageToChampions")), _safe_int(pr.get("VisionScore")))
+            )
+            
+        inserted += 1
+        
+    conn.commit()
+    conn.close()
+    print(f"[AUTO-CRAWL] Successfully imported {inserted} games into the database.")
+    return inserted
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Import real LoL esports data into the prediction database."
