@@ -82,50 +82,60 @@ def train_llm(model_id="Qwen/Qwen2.5-14B-Instruct", train_path="llm_train.jsonl"
     print(f"[INFO] Formatting dataset with Qwen chat template...")
     formatted_dataset = dataset.map(format_chat_template, batched=True, remove_columns=["messages"])
 
-    # Setup SFT Trainer
+    # Setup SFT Trainer dynamically using runtime signature inspection (reflection)
+    import inspect
+
+    # Determine parameter compatibility for TrainingArguments
+    train_args_params = inspect.signature(TrainingArguments.__init__).parameters
+    config_args = {
+        "output_dir": "qwen_lora_temp_output",
+        "per_device_train_batch_size": 4,
+        "gradient_accumulation_steps": 4,
+        "learning_rate": 2e-4,
+        "logging_steps": 10,
+        "num_train_epochs": 3,
+        "bf16": True,
+        "save_strategy": "no",
+        "report_to": "none",
+        "optim": "paged_adamw_8bit",
+        "disable_tqdm": False
+    }
+    if "eval_strategy" in train_args_params:
+        config_args["eval_strategy"] = "epoch"
+    else:
+        config_args["evaluation_strategy"] = "epoch"
+
     if SFTConfig is not None:
-        print(f"[INFO] Preparing SFTConfig...")
-        training_args = SFTConfig(
-            output_dir="qwen_lora_temp_output",
-            per_device_train_batch_size=4,
-            gradient_accumulation_steps=4,
-            learning_rate=2e-4,
-            logging_steps=10,
-            num_train_epochs=3,
-            bf16=True,  # H100 supports bfloat16 natively
-            save_strategy="no",
-            eval_strategy="epoch",
-            report_to="none",
-            optim="paged_adamw_8bit",  # Save VRAM during training
-            disable_tqdm=False,  # Explicitly force progress bar
-            dataset_text_field="text",
-            max_seq_length=512
-        )
+        print(f"[INFO] Preparing SFTConfig dynamically...")
+        sft_config_params = inspect.signature(SFTConfig.__init__).parameters
+        sft_trainer_params = inspect.signature(SFTTrainer.__init__).parameters
+
+        sft_config_special = {}
+        if "dataset_text_field" in sft_config_params:
+            sft_config_special["dataset_text_field"] = "text"
+        if "max_seq_length" in sft_config_params:
+            sft_config_special["max_seq_length"] = 512
+
+        training_args = SFTConfig(**config_args, **sft_config_special)
+
+        trainer_kwargs = {
+            "model": model,
+            "train_dataset": formatted_dataset["train"],
+            "eval_dataset": formatted_dataset["validation"],
+            "peft_config": peft_config,
+            "tokenizer": tokenizer,
+            "args": training_args
+        }
+        if "dataset_text_field" not in sft_config_special and "dataset_text_field" in sft_trainer_params:
+            trainer_kwargs["dataset_text_field"] = "text"
+        if "max_seq_length" not in sft_config_special and "max_seq_length" in sft_trainer_params:
+            trainer_kwargs["max_seq_length"] = 512
+
         print(f"[INFO] Starting SFTTrainer execution...")
-        trainer = SFTTrainer(
-            model=model,
-            train_dataset=formatted_dataset["train"],
-            eval_dataset=formatted_dataset["validation"],
-            peft_config=peft_config,
-            tokenizer=tokenizer,
-            args=training_args
-        )
+        trainer = SFTTrainer(**trainer_kwargs)
     else:
         print(f"[INFO] Preparing Training Arguments (legacy fallback)...")
-        training_args = TrainingArguments(
-            output_dir="qwen_lora_temp_output",
-            per_device_train_batch_size=4,
-            gradient_accumulation_steps=4,
-            learning_rate=2e-4,
-            logging_steps=10,
-            num_train_epochs=3,
-            bf16=True,
-            save_strategy="no",
-            evaluation_strategy="epoch",
-            report_to="none",
-            optim="paged_adamw_8bit",
-            disable_tqdm=False
-        )
+        training_args = TrainingArguments(**config_args)
         print(f"[INFO] Starting SFTTrainer execution...")
         trainer = SFTTrainer(
             model=model,
