@@ -11,7 +11,7 @@ from feature_engineering import FEATURE_COLS, TARGET_COL
 
 try:
     from autogluon.tabular import TabularPredictor
-except ImportError:
+except (ImportError, OSError):
     TabularPredictor = None
 
 class AutoGluonClassifier(BaseEstimator, ClassifierMixin):

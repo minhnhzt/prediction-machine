@@ -15,7 +15,7 @@ try:
     from peft import LoraConfig, get_peft_model, TaskType
     from trl import SFTTrainer
     HAS_LLM_TRAIN = True
-except ImportError:
+except (ImportError, OSError):
     load_dataset = None
     AutoModelForCausalLM = None
     AutoTokenizer = None

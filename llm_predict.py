@@ -9,7 +9,7 @@ try:
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     from peft import PeftModel
     HAS_LLM_PREDICT = True
-except ImportError:
+except (ImportError, OSError):
     AutoModelForCausalLM = None
     AutoTokenizer = None
     BitsAndBytesConfig = None

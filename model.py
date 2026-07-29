@@ -33,12 +33,12 @@ from feature_engineering import (
 # Optional dependencies
 try:
     from xgboost import XGBClassifier
-except ImportError:
+except (ImportError, OSError):
     XGBClassifier = None
 
 try:
     from lightgbm import LGBMClassifier
-except ImportError:
+except (ImportError, OSError):
     LGBMClassifier = None
 
 # PyTorch support
