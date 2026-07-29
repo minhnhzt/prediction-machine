@@ -102,6 +102,8 @@ def run_interactive_calculator(league: str, model_type: str, db_path: str) -> No
     blue_api_name = teams[0].get("name")
     red_api_name = teams[1].get("name")
     
+    latest_stats, name_to_id = get_latest_team_stats(db_path, league_filter=league)
+    
     blue_db_name = normalize_name(blue_api_name)
     red_db_name = normalize_name(red_api_name)
     
