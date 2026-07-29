@@ -171,7 +171,13 @@ def import_oracle_csv(
     inserted = 0
     skipped = 0
 
-    for gid in sorted_game_ids:
+    try:
+        from tqdm import tqdm
+        game_iter = tqdm(sorted_game_ids, desc="Importing matches")
+    except ImportError:
+        game_iter = sorted_game_ids
+
+    for gid in game_iter:
         rows = games[gid]
 
         # Separate team-level rows from player-level rows
@@ -338,7 +344,6 @@ def import_oracle_csv(
         inserted += 1
         if inserted % 50 == 0:
             conn.commit()
-            print(f"  ... processed {inserted} games")
 
     conn.commit()
     conn.close()
