@@ -123,30 +123,40 @@ def train_llm(model_id="Qwen/Qwen2.5-14B-Instruct", train_path="llm_train.jsonl"
             "train_dataset": formatted_dataset["train"],
             "eval_dataset": formatted_dataset["validation"],
             "peft_config": peft_config,
-            "tokenizer": tokenizer,
             "args": training_args
         }
         if "dataset_text_field" not in sft_config_special and "dataset_text_field" in sft_trainer_params:
             trainer_kwargs["dataset_text_field"] = "text"
         if "max_seq_length" not in sft_config_special and "max_seq_length" in sft_trainer_params:
             trainer_kwargs["max_seq_length"] = 512
+        if "processing_class" in sft_trainer_params:
+            trainer_kwargs["processing_class"] = tokenizer
+        elif "tokenizer" in sft_trainer_params:
+            trainer_kwargs["tokenizer"] = tokenizer
 
         print(f"[INFO] Starting SFTTrainer execution...")
         trainer = SFTTrainer(**trainer_kwargs)
     else:
         print(f"[INFO] Preparing Training Arguments (legacy fallback)...")
+        sft_trainer_params = inspect.signature(SFTTrainer.__init__).parameters
         training_args = TrainingArguments(**config_args)
+        
+        trainer_kwargs = {
+            "model": model,
+            "train_dataset": formatted_dataset["train"],
+            "eval_dataset": formatted_dataset["validation"],
+            "peft_config": peft_config,
+            "dataset_text_field": "text",
+            "max_seq_length": 512,
+            "args": training_args
+        }
+        if "processing_class" in sft_trainer_params:
+            trainer_kwargs["processing_class"] = tokenizer
+        elif "tokenizer" in sft_trainer_params:
+            trainer_kwargs["tokenizer"] = tokenizer
+            
         print(f"[INFO] Starting SFTTrainer execution...")
-        trainer = SFTTrainer(
-            model=model,
-            train_dataset=formatted_dataset["train"],
-            eval_dataset=formatted_dataset["validation"],
-            peft_config=peft_config,
-            dataset_text_field="text",
-            max_seq_length=512,
-            tokenizer=tokenizer,
-            args=training_args
-        )
+        trainer = SFTTrainer(**trainer_kwargs)
 
     trainer.train()
 
