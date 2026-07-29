@@ -73,7 +73,7 @@ pip install -r requirements.txt
 ### 1. Ingest historical data
 To load historical CSV data into the SQLite database for a league (e.g. LPL):
 ```bash
-python real_data_pipeline.py --csv "data/2025_LoL_esports_match_data_from_OraclesElixir.csv" --league LPL --fresh
+python real_data_pipeline.py --csv "data/2026_LoL_esports_match_data_from_OraclesElixir.csv" --league LPL --fresh
 ```
 
 ### 2. Run model benchmarks
