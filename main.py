@@ -102,29 +102,49 @@ def run_interactive_calculator(league: str, model_type: str, db_path: str) -> No
     blue_api_name = teams[0].get("name")
     red_api_name = teams[1].get("name")
     
-    print(f"\n[INFO] Training model on historical {league} data...")
-    latest_stats, name_to_id = get_latest_team_stats(db_path, league_filter=league)
-    model, scaler = train_model_for_league(league, model_type=model_type, db_path=db_path)
-    
     blue_db_name = normalize_name(blue_api_name)
     red_db_name = normalize_name(red_api_name)
     
     blue_feats, _ = get_team_features(blue_db_name, latest_stats, name_to_id)
     red_feats, _ = get_team_features(red_db_name, latest_stats, name_to_id)
     
-    input_vector = np.array([[
-        blue_feats["Elo"], red_feats["Elo"],
-        blue_feats["ObjCtrl"], red_feats["ObjCtrl"],
-        blue_feats["AvgKills"], red_feats["AvgKills"],
-        blue_feats["AvgDuration"], red_feats["AvgDuration"],
-        blue_feats["AvgDragons"], red_feats["AvgDragons"],
-        blue_feats["AvgTowers"], red_feats["AvgTowers"],
-        blue_feats["AvgGold"], red_feats["AvgGold"],
-        0.50, 0.50
-    ]])
-    
-    input_scaled = scaler.transform(input_vector)
-    proba = model.predict_proba(input_scaled)[0]
+    if model_type == "qwen_llm":
+        from llm_predict import predict_match_probability
+        print("\n[INFO] Initializing Qwen-2.5-14B-Instruct for prediction...")
+        p_blue = predict_match_probability(
+            blue_name=blue_api_name,
+            red_name=red_api_name,
+            blue_elo=blue_feats["Elo"],
+            red_elo=red_feats["Elo"],
+            blue_obj=blue_feats["ObjCtrl"],
+            red_obj=red_feats["ObjCtrl"],
+            blue_kills=blue_feats["AvgKills"],
+            red_kills=red_feats["AvgKills"],
+            blue_dur=blue_feats["AvgDuration"],
+            red_dur=red_feats["AvgDuration"],
+            blue_drag=blue_feats["AvgDragons"],
+            red_drag=red_feats["AvgDragons"],
+            blue_towers=blue_feats["AvgTowers"],
+            red_towers=red_feats["AvgTowers"],
+            blue_gold=blue_feats["AvgGold"],
+            red_gold=red_feats["AvgGold"]
+        )
+        proba = [1.0 - p_blue, p_blue]
+    else:
+        print(f"\n[INFO] Training model on historical {league} data...")
+        model, scaler = train_model_for_league(league, model_type=model_type, db_path=db_path)
+        input_vector = np.array([[
+            blue_feats["Elo"], red_feats["Elo"],
+            blue_feats["ObjCtrl"], red_feats["ObjCtrl"],
+            blue_feats["AvgKills"], red_feats["AvgKills"],
+            blue_feats["AvgDuration"], red_feats["AvgDuration"],
+            blue_feats["AvgDragons"], red_feats["AvgDragons"],
+            blue_feats["AvgTowers"], red_feats["AvgTowers"],
+            blue_feats["AvgGold"], red_feats["AvgGold"],
+            0.50, 0.50
+        ]])
+        input_scaled = scaler.transform(input_vector)
+        proba = model.predict_proba(input_scaled)[0]
     
     # Fetch Bovada odds to pre-populate live odds
     bovada_events = fetch_bovada_odds()
@@ -302,17 +322,25 @@ def run_interactive_calculator(league: str, model_type: str, db_path: str) -> No
 def main() -> None:
     parser = argparse.ArgumentParser(description="LPL/LCK Match Prediction System — End-to-End Pipeline")
     parser.add_argument("--league", type=str, default="LPL", choices=["LPL", "LCK"], help="League to focus on (LPL or LCK)")
-    parser.add_argument("--model", type=str, default="rf", choices=["lr", "rf", "xgboost", "lightgbm", "tabattention", "autogluon"], help="Model type to use")
+    parser.add_argument("--model", type=str, default="rf", choices=["lr", "rf", "xgboost", "lightgbm", "tabattention", "autogluon", "qwen_llm"], help="Model type to use")
     parser.add_argument("--tune", action="store_true", help="Enable hyperparameter tuning via GridSearchCV")
     parser.add_argument("--benchmark", action="store_true", help="Run the full benchmarking suite for the selected league")
     parser.add_argument("--schedule", action="store_true", help="Predict outcomes for matches in the upcoming 3 days")
     parser.add_argument("--markets", action="store_true", help="Show all secondary betting markets in schedule mode")
     parser.add_argument("--interactive", action="store_true", help="Start the interactive betting calculator")
+    parser.add_argument("--llm-train", action="store_true", help="Prepare LPL/LCK datasets and fine-tune Qwen 14B using QLoRA")
     parser.add_argument("--no-cache", action="store_true", help="Force refresh of live schedule, bypassing local cache")
     
     args = parser.parse_args()
 
     # ── Orchestrate Modes ───────────────────────────────────────────────────
+    if args.llm_train:
+        from llm_prepare_data import prepare_llm_data
+        from llm_train import train_llm
+        prepare_llm_data(league=args.league, db_path=DB_PATH)
+        train_llm(model_id="Qwen/Qwen2.5-14B-Instruct")
+        return
+
     if args.benchmark:
         run_benchmark(league=args.league)
         return

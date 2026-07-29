@@ -498,12 +498,16 @@ def predict_schedule(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=T
     latest_stats, name_to_id = get_latest_team_stats(db_path, league_filter=league)
 
     # 4. Train model on the entire historical dataset
-    try:
-        model, scaler = train_model_for_league(league, model_type=model_type, db_path=db_path)
-        print(f"[INFO] Trained {model_type.upper()} model successfully on all historical {league} data.")
-    except Exception as e:
-        print(f"[ERROR] Failed to train model for {league}: {e}")
-        return
+    model, scaler = None, None
+    if model_type != "qwen_llm":
+        try:
+            model, scaler = train_model_for_league(league, model_type=model_type, db_path=db_path)
+            print(f"[INFO] Trained {model_type.upper()} model successfully on all historical {league} data.")
+        except Exception as e:
+            print(f"[ERROR] Failed to train model for {league}: {e}")
+            return
+    else:
+        print("[INFO] Initializing Qwen-2.5-14B-Instruct for prediction...")
 
     now = datetime.datetime.now(datetime.timezone.utc)
     three_days_later = now + datetime.timedelta(days=3)
@@ -539,23 +543,46 @@ def predict_schedule(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=T
         blue_feats, blue_fallback = get_team_features(blue_db_name, latest_stats, name_to_id)
         red_feats, red_fallback = get_team_features(red_db_name, latest_stats, name_to_id)
 
-        input_vector = np.array([[
-            blue_feats["Elo"], red_feats["Elo"],
-            blue_feats["ObjCtrl"], red_feats["ObjCtrl"],
-            blue_feats["AvgKills"], red_feats["AvgKills"],
-            blue_feats["AvgDuration"], red_feats["AvgDuration"],
-            blue_feats["AvgDragons"], red_feats["AvgDragons"],
-            blue_feats["AvgTowers"], red_feats["AvgTowers"],
-            blue_feats["AvgGold"], red_feats["AvgGold"],
-            0.50, 0.50
-        ]])
-
-        input_scaled = scaler.transform(input_vector)
-        proba = model.predict_proba(input_scaled)[0]
-        pred_class = model.predict(input_scaled)[0]
-
-        pred_winner = blue_api_name if pred_class == 1 else red_api_name
-        winner_prob = proba[1] if pred_class == 1 else proba[0]
+        if model_type == "qwen_llm":
+            from llm_predict import predict_match_probability
+            proba_blue = predict_match_probability(
+                blue_name=blue_api_name,
+                red_name=red_api_name,
+                blue_elo=blue_feats["Elo"],
+                red_elo=red_feats["Elo"],
+                blue_obj=blue_feats["ObjCtrl"],
+                red_obj=red_feats["ObjCtrl"],
+                blue_kills=blue_feats["AvgKills"],
+                red_kills=red_feats["AvgKills"],
+                blue_dur=blue_feats["AvgDuration"],
+                red_dur=red_feats["AvgDuration"],
+                blue_drag=blue_feats["AvgDragons"],
+                red_drag=red_feats["AvgDragons"],
+                blue_towers=blue_feats["AvgTowers"],
+                red_towers=red_feats["AvgTowers"],
+                blue_gold=blue_feats["AvgGold"],
+                red_gold=red_feats["AvgGold"]
+            )
+            proba = [1.0 - proba_blue, proba_blue]
+            pred_class = 1 if proba_blue >= 0.5 else 0
+            pred_winner = blue_api_name if pred_class == 1 else red_api_name
+            winner_prob = proba_blue if pred_class == 1 else (1.0 - proba_blue)
+        else:
+            input_vector = np.array([[
+                blue_feats["Elo"], red_feats["Elo"],
+                blue_feats["ObjCtrl"], red_feats["ObjCtrl"],
+                blue_feats["AvgKills"], red_feats["AvgKills"],
+                blue_feats["AvgDuration"], red_feats["AvgDuration"],
+                blue_feats["AvgDragons"], red_feats["AvgDragons"],
+                blue_feats["AvgTowers"], red_feats["AvgTowers"],
+                blue_feats["AvgGold"], red_feats["AvgGold"],
+                0.50, 0.50
+            ]])
+            input_scaled = scaler.transform(input_vector)
+            proba = model.predict_proba(input_scaled)[0]
+            pred_class = model.predict(input_scaled)[0]
+            pred_winner = blue_api_name if pred_class == 1 else red_api_name
+            winner_prob = proba[1] if pred_class == 1 else proba[0]
 
         # Match Bovada event
         matched_bev = None
