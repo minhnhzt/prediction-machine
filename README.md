@@ -113,11 +113,19 @@ Select a match, choose a market option (e.g., Score 2-1 or Handicap +1.5), input
 python main.py --league LPL --interactive
 ```
 
+### 6. Kelly Betting Simulation Backtester
+Simulate your bankroll progression and evaluate Kelly Criterion betting performance over a series of historical matches. The backtester uses a walk-forward framework (training models only on historical games before predicting the next) to prevent any future data leakage:
+```bash
+# Run a 50-match backtest on LPL using Logistic Regression and 0.5x Kelly
+python main.py --backtest --league LPL --model lr --backtest-matches 50
+```
+
 ---
 
 ## ⚙️ Project Structure
 
 *   `main.py`: Unified entry point and CLI orchestrator.
+*   `backtest_betting.py`: Walk-forward betting simulator with bankroll progression visualization.
 *   `model.py`: Definitions of classical ML classifiers and PyTorch TabAttention network.
 *   `autogluon_model.py`: Amazon AutoGluon-Tabular wrapper utilizing GPU stacking.
 *   `llm_prepare_data.py`: Compiles LPL/LCK SQLite historical matches into conversational prompt files (`llm_train.jsonl`/`llm_val.jsonl`).
