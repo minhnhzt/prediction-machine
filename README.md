@@ -12,6 +12,7 @@ A high-performance predictive analytics and quantitative betting system for Leag
     *   *Classical ML*: Logistic Regression, Random Forest, XGBoost, and LightGBM with Grid Search hyperparameter tuning.
     *   *Deep Learning*: Custom PyTorch `TabAttention` classifier featuring a Multi-Head Self-Attention layer to capture complex nonlinear feature interactions.
     *   *AutoML Stacking*: Integrated **Amazon AutoGluon-Tabular** for stacked ensembling, optimized to leverage multi-GPU architectures (like NVIDIA H100) and large RAM environments.
+    *   *LLM Fine-tuning*: Fine-tune **Qwen-2.5-14B-Instruct** using QLoRA on historical draft sequences, ELOs, and rolling team statistics. We extract normalized Softmax probabilities from the target logits (`"Blue"` vs `"Red"`) to feed win probabilities directly into the Kelly Criterion betting pipeline.
 *   **Live Schedule & Caching**: Syncs upcoming schedules directly from the official **Lolesports API** with local caching to bypass rate limits.
 *   **Real-time Odds Scraping**: Automatically extracts Match Winner, Map Handicap, Total Maps, and Correct Score odds from **Bovada's public JSON API** (with Egamersworld as a fallback scraper) and maps team spellings fuzzy-style.
 *   **Secondary Market Probability Solver**: Utilizes best-of-3 (Bo3) and best-of-5 (Bo5) binomial distributions to calculate exact model probabilities for Map Handicaps, Total Maps, and Correct Scores.
@@ -88,9 +89,18 @@ python main.py --league LPL --schedule --markets
 
 # Specify a SOTA model (e.g. AutoGluon or XGBoost)
 python main.py --league LPL --schedule --model autogluon --markets
+
+# Predict schedule using Qwen 14B QLoRA model
+python main.py --league LPL --schedule --model qwen_llm --markets
 ```
 
-### 4. Interactive Betting Calculator
+### 4. LLM Fine-Tuning (FPT Cloud H100)
+To compile the training dataset from SQLite and run QLoRA fine-tuning on Qwen-2.5-14B-Instruct:
+```bash
+python main.py --league LPL --llm-train
+```
+
+### 5. Interactive Betting Calculator
 Select a match, choose a market option (e.g., Score 2-1 or Handicap +1.5), input odds you see on Stake, and calculate optimal stakes:
 ```bash
 python main.py --league LPL --interactive
@@ -103,6 +113,9 @@ python main.py --league LPL --interactive
 *   `main.py`: Unified entry point and CLI orchestrator.
 *   `model.py`: Definitions of classical ML classifiers and PyTorch TabAttention network.
 *   `autogluon_model.py`: Amazon AutoGluon-Tabular wrapper utilizing GPU stacking.
+*   `llm_prepare_data.py`: Compiles LPL/LCK SQLite historical matches into conversational prompt files (`llm_train.jsonl`/`llm_val.jsonl`).
+*   `llm_train.py`: Orchesrates QLoRA 4-bit fine-tuning of Qwen-2.5-14B-Instruct on H100 GPU.
+*   `llm_predict.py`: Implements logit-based Softmax probability extractor from the fine-tuned LLM.
 *   `feature_engineering.py`: Chronological ELO calculation, objective control tracking, and champion draft win-rate calculation.
 *   `schedule_predict.py`: Handles Lolesports API matching, Bovada scraping, binomial probability solving, and detailed predictions.
 *   `real_data_pipeline.py`: Populates SQLite database from CSV dumps.
