@@ -353,6 +353,8 @@ def main() -> None:
     parser.add_argument("--interactive", action="store_true", help="Start the interactive betting calculator")
     parser.add_argument("--llm-train", action="store_true", help="Prepare LPL/LCK datasets and fine-tune Qwen 14B using QLoRA")
     parser.add_argument("--no-cache", action="store_true", help="Force refresh of live schedule, bypassing local cache")
+    parser.add_argument("--backtest", action="store_true", help="Run walk-forward betting simulation backtest")
+    parser.add_argument("--backtest-matches", type=int, default=50, help="Number of historical matches to backtest (default: 50)")
     
     args = parser.parse_args()
 
@@ -362,6 +364,15 @@ def main() -> None:
         from llm_train import train_llm
         prepare_llm_data(league=args.league, db_path=DB_PATH)
         train_llm(model_id="Qwen/Qwen2.5-14B-Instruct")
+        return
+
+    if args.backtest:
+        from backtest_betting import run_backtest
+        run_backtest(
+            league=args.league,
+            model_type=args.model,
+            num_matches=args.backtest_matches
+        )
         return
 
     if args.benchmark:

@@ -174,6 +174,7 @@ def build_feature_dataframe(db_path: str = DB_PATH, league_filter: str | None = 
 
         row = {
             "MatchId": mid,
+            "Date": m["Date"],
             "BlueTeamId": blue,
             "RedTeamId": red,
             # -- Elo --
