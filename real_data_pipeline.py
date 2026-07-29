@@ -418,7 +418,9 @@ def import_leaguepedia(
         "Team1Bans, Team2Bans, Team1Picks, Team2Picks, "
         "Team1Gold, Team2Gold, Gamelength, "
         "Team1Kills, Team2Kills, Team1Deaths, Team2Deaths, "
-        "Team1Dragons, Team2Dragons"
+        "Team1Dragons, Team2Dragons, Team1Barons, Team2Barons, "
+        "Team1Towers, Team2Towers, Team1FB, Team2FB, "
+        "Team1FD, Team2FD, Team1FT, Team2FT, Team1Heralds, Team2Heralds"
     )
     game_where = f'Tournament="{tournament}"'
     game_rows = _cargo_query("ScoreboardGames", game_fields, game_where)
@@ -481,21 +483,27 @@ def import_leaguepedia(
         match_id = cur.lastrowid
 
         # MatchDetail
-        for side, tid, tr, opp_tr in [
-            ("Blue", blue_id, gr, gr),
-            ("Red", red_id, gr, gr),
-        ]:
+        for side, tid, tr in [("Blue", blue_id, gr), ("Red", red_id, gr)]:
             prefix = "Team1" if side == "Blue" else "Team2"
-            opp_prefix = "Team2" if side == "Blue" else "Team1"
             kills = _safe_int(tr.get(f"{prefix}Kills"), 0)
             deaths = _safe_int(tr.get(f"{prefix}Deaths"), 0)
+            dragons = _safe_int(tr.get(f"{prefix}Dragons"), 0)
+            barons = _safe_int(tr.get(f"{prefix}Barons"), 0)
+            towers = _safe_int(tr.get(f"{prefix}Towers"), 0)
+            heralds = _safe_int(tr.get(f"{prefix}Heralds"), 0)
+            gold = _safe_int(tr.get(f"{prefix}Gold"), 0)
+            
+            fb = 1 if (tr.get(f"{prefix}FB") or "").strip().lower() in ("yes", "1") else 0
+            fd = 1 if (tr.get(f"{prefix}FD") or "").strip().lower() in ("yes", "1") else 0
+            ft = 1 if (tr.get(f"{prefix}FT") or "").strip().lower() in ("yes", "1") else 0
 
             cur.execute(
                 """INSERT INTO MatchDetail
                    (MatchId, TeamId, Side, TotalKills, TotalDeaths,
-                    GoldDiff15, FirstBlood, FirstDragon)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (match_id, tid, side, kills, deaths, 0, 0, 0),
+                    GoldDiff15, FirstBlood, FirstDragon,
+                    FirstTower, Dragons, Heralds, Barons, Towers, TotalGold)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (match_id, tid, side, kills, deaths, 0, fb, fd, ft, dragons, heralds, barons, towers, gold),
             )
 
         # PickBan (bans from comma-separated fields)
@@ -617,7 +625,9 @@ def crawl_completed_match(blue_team_name: str, red_team_name: str, date_str: str
         "Team1Bans, Team2Bans, Team1Picks, Team2Picks, "
         "Team1Gold, Team2Gold, Gamelength, "
         "Team1Kills, Team2Kills, Team1Deaths, Team2Deaths, "
-        "Team1Dragons, Team2Dragons"
+        "Team1Dragons, Team2Dragons, Team1Barons, Team2Barons, "
+        "Team1Towers, Team2Towers, Team1FB, Team2FB, "
+        "Team1FD, Team2FD, Team1FT, Team2FT, Team1Heralds, Team2Heralds"
     )
     where = (
         f"((Team1 = '{blue}' AND Team2 = '{red}') OR "
@@ -694,13 +704,23 @@ def crawl_completed_match(blue_team_name: str, red_team_name: str, date_str: str
             prefix = "Team1" if side == "Blue" else "Team2"
             kills = _safe_int(tr.get(f"{prefix}Kills"), 0)
             deaths = _safe_int(tr.get(f"{prefix}Deaths"), 0)
+            dragons = _safe_int(tr.get(f"{prefix}Dragons"), 0)
+            barons = _safe_int(tr.get(f"{prefix}Barons"), 0)
+            towers = _safe_int(tr.get(f"{prefix}Towers"), 0)
+            heralds = _safe_int(tr.get(f"{prefix}Heralds"), 0)
+            gold = _safe_int(tr.get(f"{prefix}Gold"), 0)
+            
+            fb = 1 if (tr.get(f"{prefix}FB") or "").strip().lower() in ("yes", "1") else 0
+            fd = 1 if (tr.get(f"{prefix}FD") or "").strip().lower() in ("yes", "1") else 0
+            ft = 1 if (tr.get(f"{prefix}FT") or "").strip().lower() in ("yes", "1") else 0
             
             cur.execute(
                 """INSERT INTO MatchDetail
                    (MatchId, TeamId, Side, TotalKills, TotalDeaths,
-                    GoldDiff15, FirstBlood, FirstDragon)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (match_id, tid, side, kills, deaths, 0, 0, 0)
+                    GoldDiff15, FirstBlood, FirstDragon,
+                    FirstTower, Dragons, Heralds, Barons, Towers, TotalGold)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (match_id, tid, side, kills, deaths, 0, fb, fd, ft, dragons, heralds, barons, towers, gold)
             )
             
         # PickBan
