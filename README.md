@@ -44,20 +44,24 @@ flowchart TD
 
 ## 📦 Setup & Installation
 
+### Linux / Ubuntu Setup
+First, update the package list and install Git along with Python utilities:
+```bash
+sudo apt update && sudo apt install git python3-pip python3-venv -y
+```
+
 ### 1. Clone the repository
 ```bash
-git clone <your-repo-url>
-cd lol-prediction-machine
+git clone https://github.com/minhnhzt/prediction-machine
+cd prediction-machine
 ```
 
 ### 2. Create a virtual environment & install dependencies
 ```bash
-python -m venv venv
-# On Windows:
-venv\Scripts\activate
-# On Linux/macOS:
+python3 -m venv venv
 source venv/bin/activate
 
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 *Note: If running on a GPU platform (like FPT AI Factory H100), ensure CUDA-enabled PyTorch is installed.*
