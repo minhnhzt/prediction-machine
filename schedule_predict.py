@@ -730,6 +730,9 @@ def predict_schedule(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=T
             bovada_odds = parse_bovada_markets_for_event(matched_bev, b_team_a, b_team_b)
 
         # Auto-save real Bovada odds to database for historical analysis
+        if not is_actually_past:
+            state = "unstarted"
+
         if bovada_odds and state == "unstarted":
             match_date = start_time_str[:10]  # Extract YYYY-MM-DD
             save_odds_to_db(
