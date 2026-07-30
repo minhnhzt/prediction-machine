@@ -84,12 +84,25 @@ def scrape_with_playwright(league="LPL", season="summer-2026", max_pages=3, head
     all_matches = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
+        browser = p.chromium.launch(
+            headless=headless,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-setuid-sandbox"
+            ]
+        )
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1920, "height": 1080}
+            viewport={"width": 1920, "height": 1080},
+            bypass_csp=True
         )
         page = context.new_page()
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)
 
         for page_num in range(1, max_pages + 1):
             url = get_results_url(league, season, page_num)
@@ -207,6 +220,11 @@ def scrape_with_playwright(league="LPL", season="summer-2026", max_pages=3, head
 
             except Exception as e:
                 print(f"  [WARNING] Error scraping page {page_num}: {e}")
+                try:
+                    page.screenshot(path=f"oddsportal_error_page_{page_num}.png")
+                    print(f"  [INFO] Saved screenshot of error page to oddsportal_error_page_{page_num}.png")
+                except Exception:
+                    pass
                 break
 
             # Rate limiting
