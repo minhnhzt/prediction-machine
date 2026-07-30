@@ -642,7 +642,9 @@ def predict_schedule(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=T
         blue_api_name = teams[0].get("name", "Unknown")
         red_api_name = teams[1].get("name", "Unknown")
 
-        if state == "completed":
+        # Treat as completed only if Lolesports API says so AND the scheduled start time is in the past
+        is_actually_past = start_time < (now - datetime.timedelta(minutes=15))
+        if state == "completed" and is_actually_past:
             try:
                 from real_data_pipeline import crawl_completed_match
                 match_date_str = start_time.strftime("%Y-%m-%d")
