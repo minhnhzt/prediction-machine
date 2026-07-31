@@ -1,8 +1,8 @@
 const API_BASE = '/api';
 
 export const api = {
-  getSchedule: (league = 'LPL', model = 'rf', bankroll = 1000) => 
-    fetch(`${API_BASE}/schedule?league=${league}&model=${model}&bankroll=${bankroll}`).then(r => r.json()),
+  getSchedule: (league = 'LPL', model = 'rf', bankroll = 1000, oddsSource = 'bovada') => 
+    fetch(`${API_BASE}/schedule?league=${league}&model=${model}&bankroll=${bankroll}&odds_source=${oddsSource}`).then(r => r.json()),
   
   getBacktest: (params) => 
     fetch(`${API_BASE}/backtest?${new URLSearchParams(params)}`).then(r => r.json()),

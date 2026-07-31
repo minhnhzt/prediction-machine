@@ -262,6 +262,123 @@ def fetch_bovada_odds():
         print(f"[WARNING] Failed to fetch live odds from Bovada: {e}")
         return []
 
+
+# --- EGamersWorld Odds Scraper ---
+def fetch_egamersworld_live_odds(use_cache=True, db_path=DB_PATH):
+    """Scrape live match odds from EGamersWorld upcoming matches page and details, with SQLite cache."""
+    import json
+    import re
+    import time
+    import sqlite3
+    
+    cache_key = "egw_live_odds"
+    if use_cache:
+        try:
+            conn = sqlite3.connect(db_path)
+            row = conn.execute("SELECT Value, Timestamp FROM DbCache WHERE Key=?", (cache_key,)).fetchone()
+            if row:
+                val, ts = row
+                now_ts = int(time.time())
+                if now_ts - ts < 600:  # 10 minutes cache
+                    conn.close()
+                    return json.loads(val)
+            conn.close()
+        except Exception:
+            pass
+
+    print("[INFO] Fetching live odds from EGamersWorld...")
+    
+    lpl_lck_slugs = [
+        "weibo", "bilibili", "top-esports", "jd-gaming", "lng", "we", "edward",
+        "royal", "funplus", "rare-atom", "ninjas", "invictus", "ultra-prime",
+        "anyone", "omg", "thunder", "t1", "gen-g", "drx", "kt-rolster", "dplus",
+        "fearx", "soopers", "brion", "nongshim", "hanwha"
+    ]
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
+    results = []
+    try:
+        url = "https://egamersworld.com/lol/matches"
+        resp = requests.get(url, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            html = resp.text
+            links = re.findall(r'href=["\'](/lol/match/[A-Za-z0-9]+/[-a-zA-Z0-9_]+)["\']', html)
+            unique_links = sorted(list(set(links)))
+            
+            for link in unique_links:
+                slug = link.split("/")[-1].lower()
+                is_lpl_lck = any(t in slug for t in lpl_lck_slugs)
+                if not is_lpl_lck:
+                    continue
+                
+                # Fetch match detail page
+                detail_url = f"https://egamersworld.com{link}"
+                time.sleep(0.5) 
+                d_resp = requests.get(detail_url, headers=headers, timeout=10)
+                if d_resp.status_code != 200:
+                    continue
+                
+                d_html = d_resp.text
+                team1_m = re.search(r'\\\"team_1\\\"\s*:\s*\\\"([^\\\"]+)\\\"', d_html)
+                team2_m = re.search(r'\\\"team_2\\\"\s*:\s*\\\"([^\\\"]+)\\\"', d_html)
+                date_m = re.search(r'\\\"start_date\\\"\s*:\s*\\\"([^\\\"]+)\\\"', d_html)
+                
+                if not team1_m:
+                    team1_m = re.search(r'\"team_1\"\s*:\s*\"([^\\\"]+)\"', d_html)
+                if not team2_m:
+                    team2_m = re.search(r'\"team_2\"\s*:\s*\"([^\\\"]+)\"', d_html)
+                if not date_m:
+                    date_m = re.search(r'\"start_date\"\s*:\s*\"([^\\\"]+)\"', d_html)
+                
+                if not team1_m or not team2_m:
+                    continue
+                    
+                t1 = team1_m.group(1)
+                t2 = team2_m.group(1)
+                m_date = date_m.group(1)[:10] if date_m else ""
+                
+                pattern_escaped = r'\\\"date\\\"\s*:\s*\\\"([^\\\"]+)\\\"\s*,\s*\\\"k1\\\"\s*:\s*([0-9.]+)\s*,\s*\\\"k2\\\"\s*:\s*([0-9.]+)'
+                pattern_normal = r'\"date\"\s*:\s*\"([^\\\"]+)\"\s*,\s*\"k1\"\s*:\s*([0-9.]+)\s*,\s*\"k2\"\s*:\s*([0-9.]+)'
+                
+                matches_odds = re.findall(pattern_escaped, d_html)
+                if not matches_odds:
+                    matches_odds = re.findall(pattern_normal, d_html)
+                    
+                if not matches_odds:
+                    continue
+                    
+                sorted_m = sorted(matches_odds, key=lambda x: x[0])
+                latest = sorted_m[-1]
+                odds1 = float(latest[1])
+                odds2 = float(latest[2])
+                
+                results.append({
+                    "blue": t1,
+                    "red": t2,
+                    "date": m_date,
+                    "odds_blue": odds1,
+                    "odds_red": odds2,
+                    "link": link
+                })
+        
+        # Save to DbCache
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.execute("INSERT OR REPLACE INTO DbCache (Key, Value, Timestamp) VALUES (?, ?, ?)",
+                         (cache_key, json.dumps(results), int(time.time())))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+            
+    except Exception as e:
+        print(f"[WARNING] Failed to fetch EGamersWorld live odds: {e}")
+        
+    return results
+
 def parse_bovada_markets_for_event(ev, team_a, team_b):
     """Parse moneyline, point spread (handicap), total maps, and map exacta from Bovada event JSON."""
     display_groups = ev.get("displayGroups", [])
@@ -573,7 +690,7 @@ def save_odds_to_db(blue_name, red_name, match_date, bovada_odds, direction, bov
 
 # --- Main schedule prediction ---
 
-def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=True, bankroll=1000.0):
+def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=True, bankroll=1000.0, odds_source="bovada"):
     # 1. Fetch schedule
     try:
         schedule_data = fetch_schedule(use_cache=use_cache, db_path=db_path)
@@ -585,6 +702,7 @@ def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_ca
         return {"predictions": [], "model_info": {"name": model_type, "training_rows": 0}, "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
 
     bovada_events = fetch_bovada_odds()
+    egw_events = fetch_egamersworld_live_odds(use_cache=use_cache, db_path=db_path)
     latest_stats, name_to_id = get_latest_team_stats(db_path, league_filter=league)
 
     model, scaler = None, None
@@ -693,6 +811,21 @@ def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_ca
         if matched_bev:
             bovada_odds = parse_bovada_markets_for_event(matched_bev, b_team_a, b_team_b)
 
+        # Map EGamersWorld event
+        matched_egw = None
+        for egw_ev in egw_events:
+            egw_a = egw_ev["blue"]
+            egw_b = egw_ev["red"]
+            egw_dir = match_bovada_teams(egw_a, egw_b, blue_api_name, red_api_name)
+            if egw_dir:
+                matched_egw = {
+                    "ml": {
+                        "blue": egw_ev["odds_blue"] if egw_dir == "direct" else egw_ev["odds_red"],
+                        "red": egw_ev["odds_red"] if egw_dir == "direct" else egw_ev["odds_blue"]
+                    }
+                }
+                break
+
         if not is_actually_past:
             state = "unstarted"
 
@@ -706,19 +839,119 @@ def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_ca
                 db_path=db_path
             )
 
+        # We construct a standardized odds dict with "blue" and "red" keys
+        standardized_bovada_odds = None
+        if bovada_odds:
+            blue_key = b_team_a if direction == "direct" else b_team_b
+            red_key = b_team_b if direction == "direct" else b_team_a
+            
+            # Map Moneyline
+            ml_standard = {
+                "blue": bovada_odds["ml"].get(blue_key),
+                "red": bovada_odds["ml"].get(red_key)
+            }
+            
+            # Map Handicap
+            hc_standard = None
+            if bovada_odds.get("handicap"):
+                hc = bovada_odds["handicap"]
+                hc_standard = {
+                    "blue_price": hc.get("blue_price"),
+                    "blue_val": hc.get("blue_val"),
+                    "red_price": hc.get("red_price"),
+                    "red_val": hc.get("red_val")
+                }
+                
+            # Map Total
+            tot_standard = None
+            if bovada_odds.get("total"):
+                tot = bovada_odds["total"]
+                tot_standard = {
+                    "over_price": tot.get("over_price"),
+                    "under_price": tot.get("under_price")
+                }
+                
+            # Map Correct Score
+            cs_standard = bovada_odds.get("correct_score")
+            
+            standardized_bovada_odds = {
+                "ml": ml_standard,
+                "handicap": hc_standard,
+                "total": tot_standard,
+                "correct_score": cs_standard
+            }
+
+        # Resolve odds based on odds_source parameter: "bovada", "egamersworld", "best", "average"
+        resolved_odds = None
+        
+        b_ml_blue = standardized_bovada_odds["ml"]["blue"] if standardized_bovada_odds else None
+        b_ml_red = standardized_bovada_odds["ml"]["red"] if standardized_bovada_odds else None
+        
+        e_ml_blue = matched_egw["ml"]["blue"] if matched_egw else None
+        e_ml_red = matched_egw["ml"]["red"] if matched_egw else None
+        
+        final_ml_blue = None
+        final_ml_red = None
+        
+        if odds_source == "bovada":
+            final_ml_blue = b_ml_blue
+            final_ml_red = b_ml_red
+            resolved_odds = standardized_bovada_odds
+        elif odds_source == "egamersworld":
+            final_ml_blue = e_ml_blue
+            final_ml_red = e_ml_red
+            if matched_egw:
+                resolved_odds = {
+                    "ml": {
+                        "blue": e_ml_blue,
+                        "red": e_ml_red
+                    }
+                }
+        elif odds_source == "best":
+            if b_ml_blue and e_ml_blue:
+                final_ml_blue = max(b_ml_blue, e_ml_blue)
+            else:
+                final_ml_blue = b_ml_blue or e_ml_blue
+                
+            if b_ml_red and e_ml_red:
+                final_ml_red = max(b_ml_red, e_ml_red)
+            else:
+                final_ml_red = b_ml_red or e_ml_red
+                
+            resolved_odds = standardized_bovada_odds.copy() if standardized_bovada_odds else {}
+            resolved_odds["ml"] = {
+                "blue": final_ml_blue,
+                "red": final_ml_red
+            }
+        elif odds_source == "average":
+            if b_ml_blue and e_ml_blue:
+                final_ml_blue = (b_ml_blue + e_ml_blue) / 2.0
+            else:
+                final_ml_blue = b_ml_blue or e_ml_blue
+                
+            if b_ml_red and e_ml_red:
+                final_ml_red = (b_ml_red + e_ml_red) / 2.0
+            else:
+                final_ml_red = b_ml_red or e_ml_red
+                
+            resolved_odds = standardized_bovada_odds.copy() if standardized_bovada_odds else {}
+            resolved_odds["ml"] = {
+                "blue": final_ml_blue,
+                "red": final_ml_red
+            }
+        else:
+            final_ml_blue = b_ml_blue
+            final_ml_red = b_ml_red
+            resolved_odds = standardized_bovada_odds
+
         time_local = datetime.datetime.fromisoformat(start_time_str.replace("Z", "+00:00")).astimezone()
         time_local_str = time_local.strftime("%Y-%m-%d %H:%M")
 
         kelly_dict = None
         if state == "unstarted":
             chosen_odds = 1.95
-            if bovada_odds:
-                blue_key = b_team_a if direction == "direct" else b_team_b
-                red_key = b_team_b if direction == "direct" else b_team_a
-                ml_blue = bovada_odds["ml"].get(blue_key)
-                ml_red = bovada_odds["ml"].get(red_key)
-                if ml_blue and ml_red:
-                    chosen_odds = ml_blue if pred_winner == blue_api_name else ml_red
+            if final_ml_blue and final_ml_red:
+                chosen_odds = final_ml_blue if pred_winner == blue_api_name else final_ml_red
             
             kc = kelly_criterion(winner_prob, chosen_odds, bankroll=bankroll, fractional=0.5)
             kelly_dict = {
@@ -745,7 +978,7 @@ def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_ca
             "blue_prob": float(proba[1]),
             "red_prob": float(proba[0]),
             "state": state,
-            "bovada_odds": bovada_odds,
+            "bovada_odds": resolved_odds, # Mapping to resolved_odds for backward compatibility with frontend
             "market_probs": market_probs,
             "kelly": kelly_dict,
             "best_of": best_of,

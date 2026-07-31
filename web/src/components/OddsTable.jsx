@@ -21,6 +21,7 @@ export default function OddsTable({ markets, bovadaOdds }) {
     if (bovadaOdds.correct_score) {
       Object.entries(bovadaOdds.correct_score).forEach(([score, odds]) => {
         liveOddsMap[score] = odds;
+        liveOddsMap['Score ' + score] = odds;
       });
     }
   }

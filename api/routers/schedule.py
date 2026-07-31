@@ -10,7 +10,8 @@ async def get_schedule(
     league: str = Query("LPL"),
     model: str = Query("rf"),
     no_cache: bool = Query(False),
-    bankroll: float = Query(1000.0)
+    bankroll: float = Query(1000.0),
+    odds_source: str = Query("bovada")
 ):
     use_cache = not no_cache
     data = predict_schedule_data(
@@ -18,6 +19,7 @@ async def get_schedule(
         model_type=model,
         db_path=DB_PATH,
         use_cache=use_cache,
-        bankroll=bankroll
+        bankroll=bankroll,
+        odds_source=odds_source
     )
     return data

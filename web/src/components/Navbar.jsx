@@ -8,6 +8,9 @@ export default function Navbar() {
   const [league, setLeague] = useState(
     () => localStorage.getItem('league') || 'LPL'
   );
+  const [oddsSource, setOddsSource] = useState(
+    () => localStorage.getItem('odds_source') || 'bovada'
+  );
 
   useEffect(() => {
     localStorage.setItem('bankroll', bankroll);
@@ -18,6 +21,11 @@ export default function Navbar() {
     localStorage.setItem('league', league);
     window.dispatchEvent(new Event('league-changed'));
   }, [league]);
+
+  useEffect(() => {
+    localStorage.setItem('odds_source', oddsSource);
+    window.dispatchEvent(new Event('odds-source-changed'));
+  }, [oddsSource]);
 
   return (
     <nav className="glass-card" style={{
@@ -78,6 +86,17 @@ export default function Navbar() {
             style={{ width: '80px', padding: '4px 8px' }}
           />
         </div>
+        <select 
+          className="glass-select"
+          value={oddsSource}
+          onChange={e => setOddsSource(e.target.value)}
+          style={{ padding: '4px 8px' }}
+        >
+          <option value="bovada">Bovada</option>
+          <option value="egamersworld">EGamersWorld</option>
+          <option value="best">Best Odds</option>
+          <option value="average">Average Odds</option>
+        </select>
         <select 
           className="glass-select"
           value={league}

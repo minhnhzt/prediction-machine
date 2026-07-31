@@ -7,24 +7,28 @@ import LoadingSpinner, { SkeletonCard } from '../components/LoadingSpinner';
 export default function Dashboard() {
   const [bankroll, setBankroll] = useState(() => localStorage.getItem('bankroll') || '1000');
   const [league, setLeague] = useState(() => localStorage.getItem('league') || 'LPL');
+  const [oddsSource, setOddsSource] = useState(() => localStorage.getItem('odds_source') || 'bovada');
 
   useEffect(() => {
     const handleBankroll = () => setBankroll(localStorage.getItem('bankroll') || '1000');
     const handleLeague = () => setLeague(localStorage.getItem('league') || 'LPL');
+    const handleOddsSource = () => setOddsSource(localStorage.getItem('odds_source') || 'bovada');
     
     window.addEventListener('bankroll-changed', handleBankroll);
     window.addEventListener('league-changed', handleLeague);
+    window.addEventListener('odds-source-changed', handleOddsSource);
     
     return () => {
       window.removeEventListener('bankroll-changed', handleBankroll);
       window.removeEventListener('league-changed', handleLeague);
+      window.removeEventListener('odds-source-changed', handleOddsSource);
     };
   }, []);
 
   const { data, loading, error, lastUpdated } = useAutoRefresh(
-    () => api.getSchedule(league, 'rf', parseFloat(bankroll) || 1000), 
+    () => api.getSchedule(league, 'rf', parseFloat(bankroll) || 1000, oddsSource), 
     3000, 
-    [league, bankroll]
+    [league, bankroll, oddsSource]
   );
 
   if (loading && !data) {
