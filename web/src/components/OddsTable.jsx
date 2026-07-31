@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function OddsTable({ markets, bovadaOdds }) {
+export default function OddsTable({ markets, bovadaOdds, blueTeam, redTeam }) {
   if (!markets || Object.keys(markets).length === 0) return null;
 
   // Build a lookup from bovada_odds for live odds matching
@@ -19,9 +19,31 @@ export default function OddsTable({ markets, bovadaOdds }) {
     }
     // Correct Score
     if (bovadaOdds.correct_score) {
-      Object.entries(bovadaOdds.correct_score).forEach(([score, odds]) => {
-        liveOddsMap[score] = odds;
-        liveOddsMap['Score ' + score] = odds;
+      Object.entries(bovadaOdds.correct_score).forEach(([key, odds]) => {
+        const normKey = key.toLowerCase();
+        
+        // Exact raw score fallback
+        liveOddsMap[key] = odds;
+        liveOddsMap['Score ' + key] = odds;
+        
+        // Check patterns like "{Team} 2-0"
+        if (normKey.endsWith('2-0')) {
+          if (blueTeam && normKey.includes(blueTeam.toLowerCase())) {
+            liveOddsMap['2-0'] = odds;
+            liveOddsMap['Score 2-0'] = odds;
+          } else if (redTeam && normKey.includes(redTeam.toLowerCase())) {
+            liveOddsMap['0-2'] = odds;
+            liveOddsMap['Score 0-2'] = odds;
+          }
+        } else if (normKey.endsWith('2-1')) {
+          if (blueTeam && normKey.includes(blueTeam.toLowerCase())) {
+            liveOddsMap['2-1'] = odds;
+            liveOddsMap['Score 2-1'] = odds;
+          } else if (redTeam && normKey.includes(redTeam.toLowerCase())) {
+            liveOddsMap['1-2'] = odds;
+            liveOddsMap['Score 1-2'] = odds;
+          }
+        }
       });
     }
   }

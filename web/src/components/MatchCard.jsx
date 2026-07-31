@@ -65,7 +65,12 @@ export default function MatchCard({ match }) {
 
       {expanded && match.market_probs && (
         <div className="animate-fade-in" style={{ marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
-          <OddsTable markets={match.market_probs} bovadaOdds={match.bovada_odds} />
+          <OddsTable 
+            markets={match.market_probs} 
+            bovadaOdds={match.bovada_odds} 
+            blueTeam={match.blue_odds_name || blueName}
+            redTeam={match.red_odds_name || redName}
+          />
         </div>
       )}
     </div>

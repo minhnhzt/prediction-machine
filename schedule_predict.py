@@ -944,6 +944,16 @@ def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_ca
             final_ml_red = b_ml_red
             resolved_odds = standardized_bovada_odds
 
+        # Resolve matched odds names for frontend correct score lookup
+        blue_odds_name = None
+        red_odds_name = None
+        if direction:
+            blue_odds_name = b_team_a if direction == "direct" else b_team_b
+            red_odds_name = b_team_b if direction == "direct" else b_team_a
+        elif matched_egw:
+            blue_odds_name = egw_ev["blue"] if egw_dir == "direct" else egw_ev["red"]
+            red_odds_name = egw_ev["red"] if egw_dir == "direct" else egw_ev["blue"]
+
         time_local = datetime.datetime.fromisoformat(start_time_str.replace("Z", "+00:00")).astimezone()
         time_local_str = time_local.strftime("%Y-%m-%d %H:%M")
 
@@ -983,7 +993,9 @@ def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_ca
             "kelly": kelly_dict,
             "best_of": best_of,
             "direction": direction,
-            "bovada_names": (b_team_a, b_team_b) if matched_bev else None
+            "bovada_names": (b_team_a, b_team_b) if matched_bev else None,
+            "blue_odds_name": blue_odds_name,
+            "red_odds_name": red_odds_name
         })
 
     return {
