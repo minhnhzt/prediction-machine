@@ -5,10 +5,19 @@ export default function Navbar() {
   const [bankroll, setBankroll] = useState(
     () => localStorage.getItem('bankroll') || '1000'
   );
+  const [league, setLeague] = useState(
+    () => localStorage.getItem('league') || 'LPL'
+  );
 
   useEffect(() => {
     localStorage.setItem('bankroll', bankroll);
+    window.dispatchEvent(new Event('bankroll-changed'));
   }, [bankroll]);
+
+  useEffect(() => {
+    localStorage.setItem('league', league);
+    window.dispatchEvent(new Event('league-changed'));
+  }, [league]);
 
   return (
     <nav className="glass-card" style={{
@@ -69,7 +78,11 @@ export default function Navbar() {
             style={{ width: '80px', padding: '4px 8px' }}
           />
         </div>
-        <select className="glass-select">
+        <select 
+          className="glass-select"
+          value={league}
+          onChange={e => setLeague(e.target.value)}
+        >
           <option value="LPL">LPL</option>
           <option value="LCK">LCK</option>
         </select>

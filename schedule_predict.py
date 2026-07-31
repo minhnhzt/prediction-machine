@@ -573,7 +573,7 @@ def save_odds_to_db(blue_name, red_name, match_date, bovada_odds, direction, bov
 
 # --- Main schedule prediction ---
 
-def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=True):
+def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_cache=True, bankroll=1000.0):
     # 1. Fetch schedule
     try:
         schedule_data = fetch_schedule(use_cache=use_cache, db_path=db_path)
@@ -720,7 +720,7 @@ def predict_schedule_data(league="LPL", model_type="lr", db_path=DB_PATH, use_ca
                 if ml_blue and ml_red:
                     chosen_odds = ml_blue if pred_winner == blue_api_name else ml_red
             
-            kc = kelly_criterion(winner_prob, chosen_odds, bankroll=1000.0, fractional=0.5)
+            kc = kelly_criterion(winner_prob, chosen_odds, bankroll=bankroll, fractional=0.5)
             kelly_dict = {
                 "full_kelly_fraction": kc.full_kelly_fraction,
                 "applied_fraction": kc.applied_fraction,

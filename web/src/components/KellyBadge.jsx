@@ -39,7 +39,7 @@ export default function KellyBadge({ kelly }) {
           borderRadius: '4px',
           fontSize: '0.75rem' 
         }}>
-          {(kelly.wager_pct * 100).toFixed(1)}% bankroll
+          {kelly.wager_pct.toFixed(1)}% bankroll
         </span>
       )}
     </div>

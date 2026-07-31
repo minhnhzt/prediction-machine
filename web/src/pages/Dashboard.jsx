@@ -1,11 +1,31 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import MatchCard from '../components/MatchCard';
 import LoadingSpinner, { SkeletonCard } from '../components/LoadingSpinner';
 
 export default function Dashboard() {
-  const { data, loading, error, lastUpdated } = useAutoRefresh(() => api.getSchedule('LPL', 'rf'), 3000);
+  const [bankroll, setBankroll] = useState(() => localStorage.getItem('bankroll') || '1000');
+  const [league, setLeague] = useState(() => localStorage.getItem('league') || 'LPL');
+
+  useEffect(() => {
+    const handleBankroll = () => setBankroll(localStorage.getItem('bankroll') || '1000');
+    const handleLeague = () => setLeague(localStorage.getItem('league') || 'LPL');
+    
+    window.addEventListener('bankroll-changed', handleBankroll);
+    window.addEventListener('league-changed', handleLeague);
+    
+    return () => {
+      window.removeEventListener('bankroll-changed', handleBankroll);
+      window.removeEventListener('league-changed', handleLeague);
+    };
+  }, []);
+
+  const { data, loading, error, lastUpdated } = useAutoRefresh(
+    () => api.getSchedule(league, 'rf', parseFloat(bankroll) || 1000), 
+    3000, 
+    [league, bankroll]
+  );
 
   if (loading && !data) {
     return (

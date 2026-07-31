@@ -5,8 +5,22 @@ import TeamStatsTable from '../components/TeamStatsTable';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Teams() {
-  const [league, setLeague] = useState('LPL');
+  const [league, setLeague] = useState(() => localStorage.getItem('league') || 'LPL');
+
+  React.useEffect(() => {
+    const handleLeague = () => setLeague(localStorage.getItem('league') || 'LPL');
+    window.addEventListener('league-changed', handleLeague);
+    return () => window.removeEventListener('league-changed', handleLeague);
+  }, []);
+
   const { data, loading, error, lastUpdated } = useAutoRefresh(() => api.getTeamStats(league), 3000, [league]);
+
+  const handleLeagueChange = (e) => {
+    const val = e.target.value;
+    setLeague(val);
+    localStorage.setItem('league', val);
+    window.dispatchEvent(new Event('league-changed'));
+  };
 
   return (
     <div className="container animate-fade-in" style={{ paddingBottom: '40px' }}>
@@ -19,7 +33,7 @@ export default function Teams() {
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-          <select className="glass-select" value={league} onChange={e => setLeague(e.target.value)}>
+          <select className="glass-select" value={league} onChange={handleLeagueChange}>
             <option value="LPL">LPL</option>
             <option value="LCK">LCK</option>
           </select>

@@ -5,10 +5,35 @@ import MatchCard from '../components/MatchCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Schedule() {
-  const [league, setLeague] = useState('LPL');
+  const [bankroll, setBankroll] = useState(() => localStorage.getItem('bankroll') || '1000');
+  const [league, setLeague] = useState(() => localStorage.getItem('league') || 'LPL');
   const [model, setModel] = useState('rf');
   
-  const { data, loading, error } = useAutoRefresh(() => api.getSchedule(league, model), 10000, [league, model]);
+  React.useEffect(() => {
+    const handleBankroll = () => setBankroll(localStorage.getItem('bankroll') || '1000');
+    const handleLeague = () => setLeague(localStorage.getItem('league') || 'LPL');
+    
+    window.addEventListener('bankroll-changed', handleBankroll);
+    window.addEventListener('league-changed', handleLeague);
+    
+    return () => {
+      window.removeEventListener('bankroll-changed', handleBankroll);
+      window.removeEventListener('league-changed', handleLeague);
+    };
+  }, []);
+  
+  const { data, loading, error } = useAutoRefresh(
+    () => api.getSchedule(league, model, parseFloat(bankroll) || 1000), 
+    10000, 
+    [league, model, bankroll]
+  );
+
+  const handleLeagueChange = (e) => {
+    const val = e.target.value;
+    setLeague(val);
+    localStorage.setItem('league', val);
+    window.dispatchEvent(new Event('league-changed'));
+  };
 
   return (
     <div className="container animate-fade-in" style={{ paddingBottom: '40px' }}>
@@ -16,7 +41,7 @@ export default function Schedule() {
         <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>Full Schedule</h1>
         
         <div style={{ display: 'flex', gap: '16px' }}>
-          <select className="glass-select" value={league} onChange={e => setLeague(e.target.value)}>
+          <select className="glass-select" value={league} onChange={handleLeagueChange}>
             <option value="LPL">LPL</option>
             <option value="LCK">LCK</option>
           </select>
