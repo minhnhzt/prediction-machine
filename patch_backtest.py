@@ -1,59 +1,8 @@
-"""
-backtest_betting.py — Walk-forward historical backtesting simulator for the Kelly Criterion betting system.
-"""
+import re
+with open("c:/Users/Admin/Documents/AI/Prediction Model/backtest_betting.py", "r", encoding="utf-8") as f:
+    content = f.read()
 
-import os
-import sys
-import time
-import sqlite3
-import argparse
-import numpy as np
-import pandas as pd
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-
-# Add root directory to python path
-sys.path.insert(0, os.path.dirname(__file__))
-
-from feature_engineering import build_feature_dataframe, DB_PATH, FEATURE_COLS, TARGET_COL
-from model import train_and_evaluate, PyTorchTabAttentionClassifier
-from kelly_criterion import kelly_criterion
-
-# Import optional classifiers safely
-try:
-    from xgboost import XGBClassifier
-except (ImportError, OSError):
-    XGBClassifier = None
-
-try:
-    from lightgbm import LGBMClassifier
-except (ImportError, OSError):
-    LGBMClassifier = None
-
-try:
-    from autogluon_model import AutoGluonClassifier
-except ImportError:
-    AutoGluonClassifier = None
-
-
-def get_model(model_type, random_state=42):
-    if model_type == "lr":
-        return LogisticRegression(C=0.1, solver="liblinear", random_state=random_state)
-    elif model_type == "rf":
-        return RandomForestClassifier(max_depth=6, n_estimators=100, random_state=random_state, n_jobs=-1)
-    elif model_type == "xgboost" and XGBClassifier is not None:
-        return XGBClassifier(max_depth=4, n_estimators=100, learning_rate=0.05, eval_metric="logloss", random_state=random_state, n_jobs=-1)
-    elif model_type == "lightgbm" and LGBMClassifier is not None:
-        return LGBMClassifier(max_depth=4, n_estimators=100, learning_rate=0.05, verbose=-1, random_state=random_state, n_jobs=-1)
-    elif model_type == "tabattention":
-        return PyTorchTabAttentionClassifier(d_model=16, epochs=30, lr=0.01, nhead=2)
-    else:
-        # Fallback to LR
-        return LogisticRegression(C=0.1, solver="liblinear", random_state=random_state)
-
-
-
+data_func = '''
 def run_backtest_data(league="LPL", model_type="lr", initial_bankroll=1000.0, fractional=0.5, num_matches=50, margin=0.05) -> dict:
     if not os.path.isfile(DB_PATH):
         return {"error": f"Database not found at {DB_PATH}"}
@@ -228,8 +177,9 @@ def run_backtest_data(league="LPL", model_type="lr", initial_bankroll=1000.0, fr
         "bankroll_history": bankroll_history,
         "bets": bets_data
     }
+'''
 
-
+new_run_backtest = '''
 def run_backtest(league="LPL", model_type="lr", initial_bankroll=1000.0, fractional=0.5, num_matches=50, margin=0.05):
     print("=" * 70)
     print(f"  STARTING KELLY BETTING BACKTEST SIMULATOR ({league})")
@@ -245,7 +195,7 @@ def run_backtest(league="LPL", model_type="lr", initial_bankroll=1000.0, fractio
     print(f"[INFO] Initial Training Set Size: ...")
     print(f"[INFO] Backtesting on the next {num_matches} games chronologically...")
 
-    print(f"\n{'Date':<11} | {'Matchup':<30} | {'Model Prob':<12} | {'Bookie Odds':<17} | {'Wager':<14} | {'Result':<6} | {'New Bankroll'}")
+    print(f"\\n{'Date':<11} | {'Matchup':<30} | {'Model Prob':<12} | {'Bookie Odds':<17} | {'Wager':<14} | {'Result':<6} | {'New Bankroll'}")
     print("-" * 120)
 
     for b in data["bets"]:
@@ -272,7 +222,7 @@ def run_backtest(league="LPL", model_type="lr", initial_bankroll=1000.0, fractio
 
     bankroll_history = data["bankroll_history"]
     if len(bankroll_history) > 1:
-        print("\n  BANKROLL PROGRESSION CHART:")
+        print("\\n  BANKROLL PROGRESSION CHART:")
         steps = 15
         val_min = min(bankroll_history)
         val_max = max(bankroll_history)
@@ -288,22 +238,13 @@ def run_backtest(league="LPL", model_type="lr", initial_bankroll=1000.0, fractio
                     line_str += " "
             print(line_str)
         print(" " * 12 + "+" + "-" * len(bankroll_history))
+'''
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run chronological betting backtests.")
-    parser.add_argument("--league", type=str, default="LPL", choices=["LPL", "LCK"], help="League to backtest")
-    parser.add_argument("--model", type=str, default="lr", choices=["lr", "rf", "xgboost", "lightgbm", "tabattention"], help="Model to evaluate")
-    parser.add_argument("--capital", type=float, default=1000.0, help="Initial bankroll")
-    parser.add_argument("--kelly", type=float, default=0.5, help="Kelly Criterion multiplier (fractional Kelly)")
-    parser.add_argument("--matches", type=int, default=50, help="Number of games to simulate")
-    parser.add_argument("--margin", type=float, default=0.05, help="Simulated bookmaker margin")
-    args = parser.parse_args()
-
-    run_backtest(
-        league=args.league,
-        model_type=args.model,
-        initial_bankroll=args.capital,
-        fractional=args.kelly,
-        num_matches=args.matches,
-        margin=args.margin
-    )
+match = re.search(r"def run_backtest\(league=[\s\S]*?(?=if __name__ ==)", content)
+if match:
+    new_content = content[:match.start()] + data_func + "\n" + new_run_backtest + "\n" + content[match.end():]
+    with open("c:/Users/Admin/Documents/AI/Prediction Model/backtest_betting.py", "w", encoding="utf-8") as f:
+        f.write(new_content)
+    print("backtest_betting.py updated")
+else:
+    print("Could not find run_backtest")
